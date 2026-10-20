@@ -1,0 +1,1969 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <link rel="icon" href="data:," />
+    <title>Amritvela Shnaan Reward Tracker V2</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Figtree:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+    <style>
+
+      /* ============================================================
+         AMRITVELA V2 — design system
+         Intent: one job per phase of the day.
+           night  → sleep on time   (bedtime leads, reward waits)
+           open   → the window is live at full value
+           live   → rise now, pocket (value + Done dominate)
+           closed → rest easy       (next opportunity, nothing to do)
+         Type:  Cormorant Garamond (display) / Figtree (UI)
+         Rhythm: 8pt spacing · radii 28 / 18 / pill · one gold accent,
+         lavender reserved for sleep, peach only where dawn breaks.
+         ============================================================ */
+      :root {
+        color-scheme: dark;
+        /* night sky (default phase) */
+        --sky-top: #0d1030;
+        --sky-mid: #0a0c22;
+        --sky-bot: #060714;
+        --glow: rgba(240, 168, 104, .10);
+        --card: linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.018));
+        --card-brd: rgba(255,255,255,.09);
+        --field: rgba(6,7,20,.55);
+        --ink: #f6f1e3;
+        --dim: #b0abd0;
+        --faint: #7d7aa3;
+        --gold: #e9c677;
+        --gold2: #f4dc9e;
+        --gold-deep: #dfb45e;
+        --peach: #f0a868;
+        --lav: #bdb0ec;
+        --good: #a9dfba;
+        --panel-dot-ring: #171a3a;
+        --radius: 28px;
+        --radius-in: 18px;
+        --ease: cubic-bezier(.22,.8,.3,1);
+        --spring: cubic-bezier(.34,1.35,.44,1);
+      }
+      /* Phase skies — the room lightens as the intent changes */
+      body[data-phase="open"]   { --sky-top:#121233; --sky-mid:#0c0d26; --glow: rgba(240,168,104,.16); }
+      body[data-phase="live"]   { --sky-top:#161238; --sky-mid:#0d0c26; --glow: rgba(240,168,104,.22); }
+      body[data-phase="closed"] { --sky-top:#141a38; --sky-mid:#0e1128; --sky-bot:#080a1a; --glow: rgba(147,178,224,.10); }
+
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        background: var(--sky-bot);
+        color: var(--ink);
+        font-family: "Figtree", system-ui, -apple-system, sans-serif;
+        font-size: 16px;
+        line-height: 1.5;
+        min-height: 100vh;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+      }
+      /* Layered sky: gradient + dawn glow, fixed behind everything */
+      body::before {
+        content: ""; position: fixed; inset: 0; z-index: -2;
+        background:
+          radial-gradient(1100px 560px at 50% -180px, var(--glow), transparent 62%),
+          radial-gradient(760px 480px at 92% 6%, rgba(183,168,230,.09), transparent 60%),
+          radial-gradient(700px 520px at 2% 38%, rgba(80,90,180,.07), transparent 60%),
+          linear-gradient(180deg, var(--sky-top) 0%, var(--sky-mid) 46%, var(--sky-bot) 100%);
+        transition: background 1.4s var(--ease);
+      }
+      /* Stars — fine, sparse, and they fade as dawn (or morning) arrives */
+      body::after {
+        content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+        background-image:
+          radial-gradient(1.3px 1.3px at 12% 18%, rgba(255,255,255,.75), transparent 60%),
+          radial-gradient(1px 1px at 28% 8%, rgba(255,255,255,.5), transparent 60%),
+          radial-gradient(1.6px 1.6px at 44% 22%, rgba(255,255,255,.6), transparent 60%),
+          radial-gradient(1px 1px at 61% 10%, rgba(255,255,255,.45), transparent 60%),
+          radial-gradient(1.3px 1.3px at 76% 26%, rgba(255,255,255,.55), transparent 60%),
+          radial-gradient(1px 1px at 88% 12%, rgba(255,255,255,.5), transparent 60%),
+          radial-gradient(1px 1px at 6% 42%, rgba(255,255,255,.35), transparent 60%),
+          radial-gradient(1.2px 1.2px at 93% 44%, rgba(255,255,255,.35), transparent 60%),
+          radial-gradient(1px 1px at 36% 34%, rgba(255,255,255,.3), transparent 60%),
+          radial-gradient(1px 1px at 68% 38%, rgba(255,255,255,.3), transparent 60%);
+        opacity: .55; transition: opacity 1.4s var(--ease);
+      }
+      body[data-phase="open"]::after   { opacity: .38; }
+      body[data-phase="live"]::after   { opacity: .22; }
+      body[data-phase="closed"]::after { opacity: .10; }
+
+      h1, h2, .serif { font-family: "Cormorant Garamond", Georgia, serif; font-weight: 600; }
+      button { font-family: inherit; cursor: pointer; }
+      input { font-family: inherit; }
+      svg.icn { width: 18px; height: 18px; flex: none; }
+      ::selection { background: rgba(233,198,119,.35); }
+      :focus-visible { outline: 2px solid rgba(233,198,119,.75); outline-offset: 3px; border-radius: 6px; }
+
+      /* ---------- Load-in ---------- */
+      .reveal { opacity: 0; animation: rise 1s var(--ease) forwards; animation-delay: var(--d, 0s); }
+      @keyframes rise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+
+      /* ---------- Value digits ---------- */
+      .hero-value .cents, .m-value .cents { font-size: .46em; font-weight: 500; color: var(--dim); }
+      .hero-value .micro, .m-value .micro { font-size: .28em; font-weight: 500; color: var(--faint); letter-spacing: .6px; margin-left: 3px; }
+      .tier-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gold); flex: none; box-shadow: 0 0 10px rgba(233,198,119,.9); }
+      .hero-meta .tenth { font-size: .85em; color: var(--faint); }
+
+      /* ---------- Layout: one calm column, phase-aware order ----------
+         At night the sleep panel rises to sit right under the hero —
+         sleeping on time is the job then. Everything else keeps its place. */
+      main {
+        max-width: 680px; margin: 0 auto; padding: 44px 20px 136px;
+        display: flex; flex-direction: column;
+      }
+      .hero { order: 0; }
+      .panel-loc { order: 1; }
+      .panel-marks { order: 2; }
+      .panel-sleep { order: 3; }
+      .panel-alarms { order: 4; }
+      .closing { order: 5; }
+      body[data-phase="night"] .panel-sleep { order: 1; }
+      body[data-phase="night"] .panel-loc { order: 2; }
+      body[data-phase="night"] .panel-marks { order: 3; }
+
+      .panel {
+        background: var(--card); border: 1px solid var(--card-brd);
+        border-radius: var(--radius); padding: 28px; margin-bottom: 20px;
+        box-shadow: 0 24px 48px rgba(0,0,0,.26), inset 0 1px 0 rgba(255,255,255,.05);
+        backdrop-filter: blur(14px) saturate(1.15); -webkit-backdrop-filter: blur(14px) saturate(1.15);
+      }
+      .panel-head { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+      .panel-head h2 { margin: 0; font-size: 23px; letter-spacing: .2px; }
+      .panel-head .meta { margin-left: auto; font-size: 13px; color: var(--faint); font-variant-numeric: tabular-nums; text-align: right; }
+      .icon-badge {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 38px; height: 38px; border-radius: 13px; flex: none;
+        background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.07);
+        color: var(--gold);
+      }
+      .panel-sleep .icon-badge { color: var(--lav); }
+      .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+      /* ---------- Hero ---------- */
+      .hero {
+        text-align: center;
+        padding: 4px 4px 40px;
+        margin-bottom: 12px;
+        background: radial-gradient(64% 140px at 50% 100%, rgba(240,168,104,.12), transparent 72%);
+      }
+      .greet {
+        margin: 0 0 2px;
+        font-size: clamp(34px, 7.4vw, 46px);
+        font-style: italic; font-weight: 500;
+        letter-spacing: .2px;
+        color: var(--ink);
+      }
+      .ring-wrap { position: relative; width: min(88vw, 400px); margin: 18px auto 0; aspect-ratio: 1; }
+      .ring { width: 100%; height: 100%; display: block; }
+      .ring-track { fill: none; stroke: rgba(255,255,255,.07); stroke-width: 2; }
+      .ring-prog {
+        fill: none; stroke: url(#dawnGrad); stroke-width: 3; stroke-linecap: round;
+        filter: drop-shadow(0 0 6px rgba(233,198,119,.55));
+        transition: stroke-dashoffset .6s linear;
+      }
+      .ring-halo { fill: rgba(246,212,146,.16); }
+      .ring-sun { fill: #f7d794; filter: drop-shadow(0 0 8px rgba(246,212,146,1)); }
+      .ring-center {
+        position: absolute; inset: 0;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        text-align: center; padding: 0 24px; gap: 8px;
+      }
+      .hero-tier {
+        display: inline-flex; align-items: center; gap: 8px;
+        font-size: 11.5px; font-weight: 700; letter-spacing: 2.6px; text-transform: uppercase;
+        color: var(--dim);
+      }
+      .hero-value {
+        font-size: clamp(35px, 9.2vw, 54px);
+        font-weight: 300; letter-spacing: .4px; line-height: 1.04;
+        font-variant-numeric: tabular-nums;
+        color: var(--ink);
+        white-space: nowrap;
+        text-shadow: 0 2px 30px rgba(233,198,119,.14);
+      }
+      body[data-phase="closed"] .hero-value { color: var(--dim); text-shadow: none; }
+      .hero-sub { font-size: 14px; color: var(--dim); font-variant-numeric: tabular-nums; }
+      .hero-sub:empty { display: none; }
+      /* The moment loot lands: one soft pulse through the ring and value */
+      .hero.just-pocketed .ring-prog { animation: ringPulse 1.5s var(--ease); }
+      .hero.just-pocketed .hero-value { animation: valuePop 1.1s var(--spring); }
+      @keyframes ringPulse { 0% { filter: drop-shadow(0 0 6px rgba(233,198,119,.55)); } 35% { filter: drop-shadow(0 0 22px rgba(233,198,119,.95)); } 100% { filter: drop-shadow(0 0 6px rgba(233,198,119,.55)); } }
+      @keyframes valuePop { 0% { transform: scale(1); } 30% { transform: scale(1.045); } 100% { transform: scale(1); } }
+
+      /* ---------- Loss rate (per minute; tap reveals per second) ---------- */
+      .loss-wrap { display: none; }
+      .loss-wrap.show { display: block; }
+      .loss-line {
+        background: none; border: 0; padding: 6px 8px; min-height: 36px;
+        color: var(--dim); font-size: 14px; font-variant-numeric: tabular-nums;
+        display: inline-flex; align-items: center; gap: 6px;
+        transition: color .25s var(--ease);
+      }
+      .loss-line:hover { color: var(--ink); }
+      .loss-chev { width: 14px; height: 14px; color: var(--faint); flex: none; transition: transform .35s var(--ease); }
+      .loss-line[aria-expanded="true"] .loss-chev { transform: rotate(180deg); }
+      .loss-sec { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .45s var(--ease); }
+      .loss-sec.open { grid-template-rows: 1fr; }
+      .loss-sec-in { overflow: hidden; min-height: 0; }
+      .loss-sec-in span { display: block; padding-top: 3px; font-size: 12.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
+      .hero-meta {
+        margin-top: 22px;
+        font-size: 15px; color: var(--dim); font-variant-numeric: tabular-nums;
+        display: flex; justify-content: center; gap: 9px; flex-wrap: wrap;
+      }
+      .hero-meta .sep { color: var(--faint); }
+      .hero-note {
+        margin: 10px 0 0; font-family: "Cormorant Garamond", serif; font-style: italic;
+        font-size: 17px; color: var(--faint);
+      }
+
+      /* ---------- Reward multiplier — deliberately quiet ---------- */
+      .mult-control {
+        margin: 22px auto 0;
+        display: inline-flex; align-items: center; gap: 2px;
+        background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.07);
+        border-radius: 999px; padding: 4px;
+      }
+      .mult-lbl {
+        font-size: 10.5px; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase;
+        color: var(--faint); padding: 0 8px 0 12px; white-space: nowrap;
+      }
+      .mult-btn {
+        width: 40px; height: 40px; border-radius: 50%; flex: none;
+        background: transparent; border: 1px solid transparent; color: var(--dim);
+        font-size: 18px; font-weight: 600; line-height: 1;
+        display: inline-flex; align-items: center; justify-content: center;
+        transition: all .25s var(--ease);
+      }
+      .mult-btn:hover { color: var(--ink); background: rgba(255,255,255,.06); }
+      .mult-btn:active { transform: scale(.92); }
+      .mult-btn:disabled { opacity: .3; cursor: default; }
+      .mult-btn:disabled:hover { background: transparent; color: var(--dim); }
+      .mult-val {
+        min-width: 54px; text-align: center;
+        font-size: 17px; font-weight: 700; color: var(--gold2);
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* ---------- Buttons: one hierarchy everywhere ---------- */
+      .btn {
+        display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+        min-height: 48px;
+        background: rgba(255,255,255,.05); border: 1px solid var(--card-brd); color: var(--ink);
+        border-radius: 15px; padding: 12px 18px; font-size: 15px; font-weight: 600;
+        transition: all .25s var(--ease);
+      }
+      .btn:hover { border-color: rgba(189,176,236,.55); background: rgba(255,255,255,.08); }
+      .btn:active { transform: scale(.97); }
+      .btn svg { width: 16px; height: 16px; }
+      .btn-primary {
+        background: linear-gradient(180deg, var(--gold2), var(--gold-deep));
+        border-color: transparent; color: #2a2110;
+        box-shadow: 0 10px 26px rgba(233,198,119,.24), inset 0 1px 0 rgba(255,255,255,.5);
+      }
+      .btn-primary:hover { background: linear-gradient(180deg, #f9e5ae, #e7c068); border-color: transparent; }
+      .btn-primary:disabled { opacity: .5; box-shadow: none; cursor: default; }
+
+      /* ---------- Pocket: THE primary action, but only in its phase ----------
+         Live/open: dominant gold pill with a slow breathing glow.
+         Night/closed: the job is sleep or rest — Done steps back to a quiet
+         outline so nothing competes with the phase's real intent. */
+      .pocket-zone { margin-top: 26px; }
+      .pocket-btn {
+        font-size: 17px; font-weight: 700; padding: 17px 32px; border-radius: 999px; min-height: 58px;
+      }
+      body[data-phase="live"] .pocket-btn { animation: breathe 3.2s ease-in-out infinite; }
+      @keyframes breathe {
+        0%, 100% { box-shadow: 0 10px 26px rgba(233,198,119,.24), 0 0 0 0 rgba(233,198,119,.28), inset 0 1px 0 rgba(255,255,255,.5); }
+        50% { box-shadow: 0 12px 30px rgba(233,198,119,.32), 0 0 0 9px rgba(233,198,119,0), inset 0 1px 0 rgba(255,255,255,.5); }
+      }
+      body[data-phase="night"] .pocket-btn,
+      body[data-phase="closed"] .pocket-btn {
+        background: rgba(255,255,255,.04); border: 1px solid var(--card-brd); color: var(--dim);
+        box-shadow: none; font-weight: 600;
+      }
+      body[data-phase="night"] .pocket-btn:hover,
+      body[data-phase="closed"] .pocket-btn:hover { background: rgba(255,255,255,.08); color: var(--ink); border-color: rgba(255,255,255,.22); }
+      .pocket-btn:disabled { opacity: .55; cursor: default; transform: none; animation: none; }
+      body[data-phase="night"] .pocket-btn:disabled,
+      body[data-phase="closed"] .pocket-btn:disabled { opacity: .75; color: var(--good); border-color: rgba(169,223,186,.35); }
+      .pocket-confirm { margin: 14px auto 0; max-width: 440px; font-size: 14px; color: var(--good); font-variant-numeric: tabular-nums; }
+      .pocket-confirm.dim { color: var(--faint); }
+
+      /* ---------- Location — a utility, kept quiet ---------- */
+      .loc-input {
+        flex: 1 1 180px; min-width: 0; min-height: 48px;
+        background: var(--field); border: 1px solid var(--card-brd); color: var(--ink);
+        border-radius: 15px; padding: 12px 16px; font-size: 16px;
+        transition: border-color .25s var(--ease), box-shadow .25s var(--ease);
+      }
+      .loc-input::placeholder { color: var(--faint); }
+      .loc-input:focus { outline: none; border-color: rgba(189,176,236,.7); box-shadow: 0 0 0 3px rgba(189,176,236,.15); }
+      .status-line { font-size: 13px; color: var(--dim); margin-top: 14px; display: flex; align-items: center; gap: 9px; }
+      .status-line .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--lav); flex: none; }
+      .status-line.live .dot { background: var(--good); box-shadow: 0 0 8px rgba(169,223,186,.85); }
+
+      /* ---------- Marks timeline ---------- */
+      #marksList { position: relative; margin-top: 12px; }
+      #marksList::before {
+        content: ""; position: absolute; left: 19px; top: 24px; bottom: 24px; width: 2px;
+        background: linear-gradient(180deg, rgba(233,198,119,.4), rgba(255,255,255,.06));
+        border-radius: 2px;
+      }
+      .mark {
+        position: relative;
+        display: flex; align-items: center; gap: 14px;
+        padding: 13px 14px; border-radius: var(--radius-in); border: 1px solid transparent;
+        transition: background .3s var(--ease), border-color .3s var(--ease), opacity .3s var(--ease);
+      }
+      .mark .dot {
+        width: 12px; height: 12px; border-radius: 50%; flex: none; position: relative; z-index: 1;
+        box-shadow: 0 0 0 5px var(--panel-dot-ring);
+      }
+      .mark .name { font-weight: 700; font-size: 16px; min-width: 58px; }
+      .mark .when { color: var(--dim); font-size: 14px; font-variant-numeric: tabular-nums; }
+      .mark .amt { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; font-size: 16px; }
+      .mark .tag {
+        font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+        background: rgba(233,198,119,.12); border: 1px solid rgba(233,198,119,.32); color: var(--gold2);
+        border-radius: 999px; padding: 3px 9px; white-space: nowrap;
+      }
+      .mark .tag-soft { background: rgba(255,255,255,.05); border-color: var(--card-brd); color: var(--faint); }
+      .mark.now {
+        background: rgba(255,255,255,.055); border-color: rgba(233,198,119,.28);
+        box-shadow: 0 10px 26px rgba(0,0,0,.22);
+      }
+      .mark.now .dot { box-shadow: 0 0 0 5px var(--panel-dot-ring), 0 0 16px 4px rgba(233,198,119,.55); }
+      .mark.done { opacity: .4; }
+      .mark-note { color: var(--faint); font-size: 13.5px; margin: 16px 2px 0; font-variant-numeric: tabular-nums; }
+
+      /* ---------- Chips ---------- */
+      .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+      .chip {
+        min-height: 44px;
+        background: rgba(255,255,255,.04); border: 1px solid var(--card-brd); color: var(--ink);
+        border-radius: 999px; padding: 10px 18px; font-size: 15px; font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        transition: all .25s var(--spring);
+      }
+      .chip:hover { border-color: rgba(189,176,236,.55); background: rgba(255,255,255,.07); }
+      .chip:active { transform: scale(.95); }
+      .chip.sel {
+        background: linear-gradient(180deg, #cfc2f2, var(--lav));
+        border-color: transparent; color: #221a3d;
+        box-shadow: 0 8px 22px rgba(183,168,230,.26);
+      }
+
+      /* ---------- Sleep: the night phase's supporting hero ---------- */
+      .bedtime-box {
+        margin: 6px 0 22px;
+        background:
+          radial-gradient(120% 170% at 10% 0%, rgba(189,176,236,.14), transparent 55%),
+          radial-gradient(120% 160% at 95% 100%, rgba(233,198,119,.10), transparent 55%),
+          var(--field);
+        border: 1px solid rgba(189,176,236,.26);
+        border-radius: 22px; padding: 22px;
+        display: flex; gap: 22px; flex-wrap: wrap; align-items: center;
+      }
+      body[data-phase="night"] .bedtime-box {
+        border-color: rgba(233,198,119,.34);
+        box-shadow: 0 14px 34px rgba(0,0,0,.28), 0 0 0 1px rgba(233,198,119,.06);
+      }
+      .bedtime-big {
+        font-family: "Cormorant Garamond", serif; font-size: 52px; font-weight: 600;
+        line-height: 1; font-variant-numeric: tabular-nums; color: var(--gold2);
+      }
+      .bedtime-lbl { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--gold); font-weight: 700; margin-bottom: 7px; }
+      .bedtime-alt { color: var(--dim); font-size: 14.5px; font-variant-numeric: tabular-nums; line-height: 1.55; }
+      .bedtime-alt strong { color: var(--ink); font-weight: 600; }
+      .stepper { display: inline-flex; align-items: center; border: 1px solid var(--card-brd); border-radius: 15px; overflow: hidden; background: var(--field); }
+      .stepper button {
+        background: rgba(255,255,255,.05); border: 0; color: var(--ink);
+        width: 46px; height: 48px; font-size: 20px; font-weight: 600;
+        transition: background .2s var(--ease);
+      }
+      .stepper button:hover { background: rgba(255,255,255,.1); }
+      .stepper button:active { transform: scale(.93); }
+      .stepper .mid { padding: 0 12px; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 86px; text-align: center; }
+      .field-lbl { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--faint); font-weight: 700; margin-bottom: 9px; }
+
+      /* ---------- Switch ---------- */
+      .switch { position: relative; width: 52px; height: 32px; flex: none; display: inline-block; }
+      .switch input { opacity: 0; width: 0; height: 0; }
+      .switch .track {
+        position: absolute; inset: 0; border-radius: 999px;
+        background: rgba(255,255,255,.09); border: 1px solid var(--card-brd);
+        transition: all .3s var(--spring); cursor: pointer;
+      }
+      .switch .track::after {
+        content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px;
+        border-radius: 50%; background: var(--dim); transition: all .3s var(--spring);
+      }
+      .switch input:checked + .track { background: rgba(189,176,236,.35); border-color: rgba(189,176,236,.5); }
+      .switch input:checked + .track::after { left: 23px; background: var(--lav); box-shadow: 0 0 10px rgba(189,176,236,.6); }
+      .switch input:focus-visible + .track { outline: 2px solid var(--lav); outline-offset: 2px; }
+      .switch.sm { width: 48px; height: 28px; }
+      .switch.sm .track::after { width: 20px; height: 20px; }
+      .switch.sm input:checked + .track::after { left: 23px; }
+
+      /* ---------- Alarms ---------- */
+      .alarm-list { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+      .alarm-item {
+        display: flex; align-items: center; gap: 12px; min-height: 56px;
+        background: var(--field); border: 1px solid var(--card-brd); border-radius: var(--radius-in); padding: 10px 14px 10px 18px;
+        transition: opacity .3s var(--ease);
+      }
+      .alarm-item .t { font-weight: 700; font-variant-numeric: tabular-nums; font-size: 17px; }
+      .alarm-item .l { color: var(--dim); font-size: 13.5px; }
+      .alarm-item .switch { margin-left: auto; }
+      .alarm-item .x {
+        background: none; border: 0; color: var(--faint); font-size: 20px; line-height: 1;
+        width: 40px; height: 40px; border-radius: 50%;
+        display: inline-flex; align-items: center; justify-content: center;
+        transition: color .2s, background .2s;
+      }
+      .alarm-item .x:hover { color: var(--ink); background: rgba(255,255,255,.06); }
+      .alarm-item.off { opacity: .45; }
+      .empty { color: var(--faint); font-size: 14px; padding: 8px 2px; }
+      .time-input {
+        background: var(--field); border: 1px solid var(--card-brd); color: var(--ink); min-height: 48px;
+        border-radius: 15px; padding: 11px 14px; font-size: 16px; font-variant-numeric: tabular-nums;
+        transition: border-color .25s var(--ease), box-shadow .25s var(--ease);
+      }
+      .time-input:focus { outline: none; border-color: rgba(189,176,236,.7); box-shadow: 0 0 0 3px rgba(189,176,236,.15); }
+      .panel.disabled .panel-body { opacity: .38; pointer-events: none; }
+      .panel-body { transition: opacity .3s var(--ease); }
+
+      .closing { text-align: center; color: var(--faint); font-size: 17px; margin: 30px 8px 0; font-family: "Cormorant Garamond", serif; font-style: italic; }
+
+      /* ---------- Modals ---------- */
+      .modal-back {
+        position: fixed; inset: 0; z-index: 100;
+        background: rgba(4,5,16,.78);
+        backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+        display: none; align-items: center; justify-content: center; padding: 20px;
+      }
+      .modal-back.open { display: flex; }
+      .modal {
+        background: linear-gradient(180deg, #262950, #1a1c3c);
+        border: 1px solid rgba(255,255,255,.12); border-radius: 32px;
+        max-width: 430px; width: 100%; padding: 36px 30px; text-align: center;
+        box-shadow: 0 36px 90px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.07);
+        animation: modalIn .55s var(--spring);
+      }
+      @keyframes modalIn { from { opacity: 0; transform: translateY(22px) scale(.97); } to { opacity: 1; transform: none; } }
+      .modal-icon {
+        width: 66px; height: 66px; margin: 0 auto;
+        display: flex; align-items: center; justify-content: center;
+        border-radius: 50%;
+        background: radial-gradient(circle at 50% 65%, rgba(240,168,104,.35), rgba(240,168,104,.08) 70%);
+        border: 1px solid rgba(240,168,104,.3);
+        color: var(--gold2);
+      }
+      .modal-icon svg { width: 30px; height: 30px; }
+      .modal h2 { margin: 16px 0 4px; font-size: 31px; }
+      .modal .m-sub { color: var(--dim); font-size: 15px; margin: 0 0 18px; }
+      .modal .m-value { font-size: 32px; font-weight: 600; color: var(--gold2); font-variant-numeric: tabular-nums; }
+      .modal .m-note { color: var(--faint); font-size: 13px; margin: 8px 0 24px; }
+      .modal .btn { width: 100%; padding: 15px; font-size: 16px; margin-top: 9px; }
+
+      /* ---------- Pocket when popup ---------- */
+      .pocket-modal { text-align: left; padding: 30px 26px 26px; }
+      .pocket-modal h2 { text-align: center; margin-top: 2px; }
+      .pocket-modal .m-sub { text-align: center; }
+      .when-tabs { display: flex; gap: 5px; background: rgba(6,7,20,.55); border: 1px solid var(--card-brd); border-radius: 999px; padding: 5px; margin: 18px 0; }
+      .when-tab {
+        flex: 1; border: 0; background: transparent; color: var(--dim); min-height: 44px;
+        border-radius: 999px; padding: 10px 6px; font-size: 14.5px; font-weight: 700;
+        transition: all .25s var(--ease); white-space: nowrap;
+      }
+      .when-tab.sel { background: linear-gradient(180deg, var(--gold2), var(--gold-deep)); color: #2a2110; box-shadow: 0 6px 16px rgba(233,198,119,.22); }
+      .when-panel { min-height: 74px; }
+      .mins-chips { display: flex; gap: 7px; flex-wrap: wrap; justify-content: center; }
+      .mins-custom { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 14px; color: var(--dim); font-size: 14px; }
+      .mins-input {
+        width: 78px; text-align: center; min-height: 48px;
+        background: var(--field); border: 1px solid var(--card-brd); color: var(--ink);
+        border-radius: 13px; padding: 10px 8px; font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums;
+      }
+      .mins-input:focus { outline: none; border-color: rgba(233,198,119,.6); box-shadow: 0 0 0 3px rgba(233,198,119,.14); }
+      .when-now-note { text-align: center; color: var(--dim); font-size: 14.5px; padding: 14px 8px 6px; font-variant-numeric: tabular-nums; }
+      .when-time-row { display: flex; justify-content: center; padding-top: 6px; }
+      .when-time-row .time-input { font-size: 19px; padding: 12px 16px; text-align: center; }
+      .pocket-preview {
+        margin-top: 18px; text-align: center;
+        background: radial-gradient(120% 160% at 12% 0%, rgba(233,198,119,.13), transparent 55%), var(--field);
+        border: 1px solid rgba(233,198,119,.3); border-radius: 20px; padding: 18px 14px 15px;
+      }
+      .pocket-preview .pp-amt { font-family: "Cormorant Garamond", serif; font-size: 36px; font-weight: 600; color: var(--gold2); line-height: 1.1; font-variant-numeric: tabular-nums; }
+      .pocket-preview .pp-line { color: var(--ink); font-size: 14.5px; margin-top: 5px; font-variant-numeric: tabular-nums; }
+      .pocket-preview .pp-note { color: var(--faint); font-size: 13px; margin-top: 4px; }
+      .pocket-preview.closed { border-color: var(--card-brd); background: var(--field); }
+      .pocket-preview.closed .pp-amt { color: var(--dim); }
+
+      /* ---------- Balance & history sheet ---------- */
+      .sheet-handle {
+        position: fixed; left: 50%; transform: translateX(-50%);
+        bottom: calc(16px + env(safe-area-inset-bottom)); z-index: 80;
+        display: inline-flex; align-items: center; gap: 10px; min-height: 52px;
+        background: linear-gradient(180deg, rgba(38,41,80,.92), rgba(27,29,62,.92));
+        backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(233,198,119,.4); color: var(--ink);
+        border-radius: 999px; padding: 13px 22px; font-size: 15px; font-weight: 700;
+        box-shadow: 0 18px 44px rgba(0,0,0,.55);
+        transition: border-color .25s var(--ease), transform .25s var(--spring);
+        white-space: nowrap;
+      }
+      .sheet-handle:hover { border-color: rgba(233,198,119,.7); }
+      .sheet-handle:active { transform: translateX(-50%) scale(.96); }
+      .sheet-handle svg { width: 16px; height: 16px; color: var(--gold); }
+      .sheet-handle .handle-days { font-size: 12.5px; font-weight: 600; color: var(--dim); }
+      .sheet-back {
+        position: fixed; inset: 0; z-index: 90;
+        background: rgba(4,5,16,.6);
+        backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+        opacity: 0; pointer-events: none; transition: opacity .4s var(--ease);
+      }
+      .sheet-back.open { opacity: 1; pointer-events: auto; }
+      .sheet {
+        position: fixed; left: 50%; bottom: 0; z-index: 95;
+        width: min(720px, 100%); max-height: 84vh; overflow-y: auto;
+        transform: translate(-50%, 106%);
+        transition: transform .6s var(--spring);
+        background: linear-gradient(180deg, #20224a, #12142c);
+        border: 1px solid var(--card-brd); border-bottom: 0;
+        border-radius: 30px 30px 0 0;
+        padding: 12px 26px calc(32px + env(safe-area-inset-bottom));
+        box-shadow: 0 -28px 70px rgba(0,0,0,.55);
+      }
+      .sheet.open { transform: translate(-50%, 0); }
+      .sheet-grab { width: 46px; height: 5px; border-radius: 99px; background: rgba(255,255,255,.2); margin: 2px auto 16px; }
+      .sheet-head { display: flex; align-items: center; gap: 12px; }
+      .sheet-head h2 { margin: 0; font-size: 27px; }
+      .sheet-head .x {
+        margin-left: auto; background: rgba(255,255,255,.05); border: 1px solid var(--card-brd);
+        color: var(--dim); width: 40px; height: 40px; border-radius: 50%;
+        font-size: 19px; line-height: 1; display: inline-flex; align-items: center; justify-content: center;
+        transition: color .2s, border-color .2s;
+      }
+      .sheet-head .x:hover { color: var(--ink); border-color: rgba(255,255,255,.28); }
+      .bal-row {
+        margin-top: 20px;
+        background: radial-gradient(120% 160% at 12% 0%, rgba(233,198,119,.13), transparent 55%), var(--field);
+        border: 1px solid rgba(233,198,119,.3);
+        border-radius: 22px; padding: 22px;
+        display: flex; align-items: center; gap: 16px;
+      }
+      .bal-amt {
+        font-family: "Cormorant Garamond", serif; font-size: 44px; font-weight: 600;
+        line-height: 1.05; color: var(--gold2); font-variant-numeric: tabular-nums; letter-spacing: 1px;
+      }
+      .eye-btn {
+        margin-left: auto; flex: none;
+        width: 46px; height: 46px; border-radius: 50%;
+        background: rgba(255,255,255,.05); border: 1px solid var(--card-brd); color: var(--dim);
+        display: inline-flex; align-items: center; justify-content: center;
+        transition: all .25s var(--ease);
+      }
+      .eye-btn:hover { color: var(--gold2); border-color: rgba(233,198,119,.5); }
+      .eye-btn svg { width: 21px; height: 21px; }
+      .bal-days { margin-top: 15px; font-size: 14px; color: var(--dim); font-variant-numeric: tabular-nums; }
+      .hist-list { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+      .hist-item {
+        display: flex; align-items: center; gap: 12px; min-height: 56px;
+        background: var(--field); border: 1px solid var(--card-brd);
+        border-radius: var(--radius-in); padding: 11px 14px 11px 18px;
+      }
+      .hist-item .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+      .hist-item .h-main { display: flex; flex-direction: column; min-width: 0; }
+      .hist-item .h-date { font-weight: 700; font-size: 15.5px; }
+      .hist-item .h-sub { color: var(--dim); font-size: 13px; font-variant-numeric: tabular-nums; }
+      .hist-item .h-amt { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; font-size: 16px; color: var(--gold2); white-space: nowrap; }
+      .undo-btn {
+        flex: none; min-height: 38px;
+        background: rgba(255,255,255,.05); border: 1px solid var(--card-brd); color: var(--dim);
+        border-radius: 999px; padding: 7px 15px; font-size: 13px; font-weight: 600;
+        transition: all .25s var(--ease);
+      }
+      .undo-btn:hover { color: var(--ink); border-color: rgba(255,255,255,.3); }
+
+      @media (max-width: 560px) {
+        .sheet-handle {
+          left: auto; right: calc(14px + env(safe-area-inset-right));
+          transform: none; padding: 0; font-size: 14px;
+          width: 52px; height: 52px; min-height: 52px; justify-content: center; gap: 0;
+        }
+        .sheet-handle:active { transform: scale(.96); }
+        .sheet-handle .handle-label { display: none; }
+        .sheet-handle .handle-days { display: none; }
+      }
+      @media (max-width: 480px) {
+        main { padding: 36px 16px 128px; }
+        .panel { padding: 22px; }
+        .bedtime-big { font-size: 44px; }
+        .mark .tag { display: none; }
+        .mark .amt { font-size: 15px; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        html { scroll-behavior: auto; }
+        .reveal { opacity: 1; animation: none; }
+        .modal { animation: none; }
+        .hero.just-pocketed .ring-prog, .hero.just-pocketed .hero-value { animation: none; }
+        body[data-phase="live"] .pocket-btn { animation: none; }
+        body::before, body::after { transition: none; }
+        * { transition: none !important; }
+      }
+    </style>
+  </head>
+  <body data-phase="night">
+
+    <main>
+      <!-- Hero -->
+      <section class="hero reveal" style="--d:.02s" aria-label="This morning's value">
+        <h1 class="greet" id="greeting">Good evening</h1>
+        <div class="ring-wrap">
+          <svg class="ring" viewBox="0 0 200 200" aria-hidden="true">
+            <defs>
+              <linearGradient id="dawnGrad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#b7a8e6" />
+                <stop offset=".55" stop-color="#e9c677" />
+                <stop offset="1" stop-color="#f0a868" />
+              </linearGradient>
+            </defs>
+            <circle class="ring-track" cx="100" cy="100" r="88" />
+            <circle class="ring-prog" id="ringProg" cx="100" cy="100" r="88" stroke-dasharray="552.92" stroke-dashoffset="552.92" transform="rotate(-90 100 100)" />
+            <circle class="ring-halo" id="ringHalo" cx="100" cy="12" r="10" />
+            <circle class="ring-sun" id="ringSun" cx="100" cy="12" r="4" />
+          </svg>
+          <div class="ring-center">
+            <div class="hero-tier"><span class="tier-dot" id="heroDot"></span><span id="heroTier">Gold awaits</span></div>
+            <div class="hero-value" id="heroValue">$95,043,670</div>
+            <div class="hero-sub" id="heroSub">—</div>
+            <div class="loss-wrap" id="lossWrap">
+              <button class="loss-line" id="lossLine" type="button" aria-expanded="false" aria-controls="lossSec" aria-label="Show loss per second">
+                <span id="lossMin">—</span>
+                <svg class="loss-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+              </button>
+              <div class="loss-sec" id="lossSec"><div class="loss-sec-in"><span id="lossSecVal">—</span></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="hero-meta">
+          <span id="heroSunrise">Sunrise 6:00 AM</span>
+          <span class="sep" aria-hidden="true">·</span>
+          <span id="heroCountdown">—</span>
+        </div>
+        <div>
+          <div class="mult-control" role="group" aria-label="Reward multiplier">
+            <span class="mult-lbl">Reward</span>
+            <button class="mult-btn" type="button" id="multMinus" aria-label="Decrease reward multiplier">−</button>
+            <span class="mult-val" id="multVal">×10</span>
+            <button class="mult-btn" type="button" id="multPlus" aria-label="Increase reward multiplier">+</button>
+          </div>
+        </div>
+        <div class="pocket-zone">
+          <button class="btn btn-primary pocket-btn" id="pocketBtn" type="button">Shnaan done — Pocket the loot</button>
+          <p class="pocket-confirm" id="pocketConfirm" hidden></p>
+        </div>
+        <p class="hero-note" id="heroNote">Sleep is how the morning is won.</p>
+      </section>
+
+      <!-- Location -->
+      <section class="panel panel-loc reveal" style="--d:.1s" aria-label="Your location">
+        <div class="row">
+          <span class="icon-badge" aria-hidden="true">
+            <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+          </span>
+          <input class="loc-input" id="cityInput" type="text" placeholder="Your city — e.g. Surrey, BC" autocomplete="off" enterkeyhint="search" />
+          <button class="btn" id="cityBtn" type="button">Set city</button>
+          <button class="btn" id="geoBtn" type="button">Use my location</button>
+        </div>
+        <div class="status-line" id="locStatus"><span class="dot"></span><span id="locStatusText">Sunrise 6:00 AM to start — checking your time zone for a closer match.</span></div>
+      </section>
+
+      <!-- Marks -->
+      <section class="panel panel-marks reveal" style="--d:.18s" aria-label="Morning marks">
+        <div class="panel-head">
+          <span class="icon-badge" aria-hidden="true">
+            <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 18a5 5 0 0 0-10 0"/><path d="M12 9V2"/><path d="m4.22 10.22 1.42 1.42"/><path d="M1 18h2"/><path d="M21 18h2"/><path d="M18.36 11.64l1.42-1.42"/><path d="M23 22H1"/><path d="m8 6 4-4 4 4"/></svg>
+          </span>
+          <h2>Marks</h2>
+          <span class="meta" id="marksHint">—</span>
+        </div>
+        <div id="marksList"></div>
+        <p class="mark-note" id="nextMarkNote"></p>
+      </section>
+
+      <!-- Sleep planner -->
+      <section class="panel panel-sleep reveal" style="--d:.26s" aria-label="Sleep cycle planner">
+        <div class="panel-head">
+          <span class="icon-badge" aria-hidden="true">
+            <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          </span>
+          <h2>Tonight's sleep</h2>
+        </div>
+        <div class="bedtime-box">
+          <div>
+            <div class="bedtime-lbl">Start winding down</div>
+            <div class="bedtime-big" id="bedtimeBig">—</div>
+          </div>
+          <div class="bedtime-alt" id="bedtimeAlt">—</div>
+        </div>
+        <div class="field-lbl">Sleep length · full 90-minute cycles</div>
+        <div class="chips" id="cycleChips"></div>
+        <div class="row" style="margin-top:18px; align-items:flex-end;">
+          <div>
+            <div class="field-lbl">Wind-down time</div>
+            <div class="stepper">
+              <button type="button" id="bufMinus" aria-label="Less wind-down time">−</button>
+              <span class="mid" id="bufLabel">15 min</span>
+              <button type="button" id="bufPlus" aria-label="More wind-down time">+</button>
+            </div>
+          </div>
+          <div style="margin-left:auto; text-align:right;">
+            <div class="field-lbl">Bedtime reminder</div>
+            <button class="btn" id="notifyBtn" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+              <span id="notifyText">Remind me</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Alarms -->
+      <section class="panel panel-alarms reveal" style="--d:.34s" id="alarmPanel" aria-label="Amritvela alarms">
+        <div class="panel-head">
+          <span class="icon-badge" aria-hidden="true">
+            <svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5"/><path d="M5 3 2 6"/><path d="m22 6-3-3"/></svg>
+          </span>
+          <h2>Alarms</h2>
+          <label class="switch" style="margin-left:auto">
+            <input type="checkbox" id="alarmMaster" checked />
+            <span class="track"></span>
+          </label>
+        </div>
+        <div class="panel-body" id="alarmBody">
+          <div class="field-lbl" style="margin-top:16px">Quick set</div>
+          <div class="chips" id="presetChips"></div>
+          <div class="row" style="margin-top:16px;">
+            <input class="time-input" type="time" id="customTime" value="02:00" />
+            <button class="btn" id="customBtn" type="button">Add alarm</button>
+            <button class="btn" id="testBtn" type="button" style="margin-left:auto">Test sound</button>
+          </div>
+          <div class="alarm-list" id="alarmList"></div>
+        </div>
+      </section>
+
+      <p class="closing reveal" style="--d:.42s">Rest well tonight. The morning will be there, and so will its quiet reward.</p>
+    </main>
+
+    <!-- Balance & history sheet -->
+    <button class="sheet-handle" id="sheetHandle" type="button" aria-label="Open balance and history">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg>
+      <span class="handle-label">Balance &amp; History</span>
+      <span class="handle-days" id="handleDays">No days yet</span>
+    </button>
+    <div class="sheet-back" id="sheetBack"></div>
+    <section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-label="Balance and history">
+      <div class="sheet-grab" aria-hidden="true"></div>
+      <div class="sheet-head">
+        <h2>Balance &amp; History</h2>
+        <button type="button" class="x" id="sheetClose" aria-label="Close balance and history">×</button>
+      </div>
+      <div class="bal-row">
+        <div>
+          <div class="field-lbl" style="margin-bottom:4px">Total balance</div>
+          <div class="bal-amt" id="balAmt">••••••</div>
+        </div>
+        <button type="button" class="eye-btn" id="eyeBtn" aria-label="Show balance"></button>
+      </div>
+      <div class="bal-days" id="balDays">0 days pocketed</div>
+      <div class="hist-list" id="histList"></div>
+    </section>
+
+    <!-- Pocket when popup (hidden behind Done) -->
+    <div class="modal-back" id="pocketModal" role="dialog" aria-modal="true" aria-labelledby="pocketModalTitle">
+      <div class="modal pocket-modal">
+        <h2 id="pocketModalTitle">When did you finish?</h2>
+        <p class="m-sub" style="margin-bottom:0">Pocket the value from that moment.</p>
+        <div class="when-tabs" role="group" aria-label="When did you finish Shnaan">
+          <button type="button" class="when-tab sel" data-when="now">Done now</button>
+          <button type="button" class="when-tab" data-when="ago">Mins ago</button>
+          <button type="button" class="when-tab" data-when="time">At a time</button>
+        </div>
+        <div class="when-panel" id="whenNowPanel">
+          <div class="when-now-note">Finished just now — pocket the live value.</div>
+        </div>
+        <div class="when-panel" id="whenAgoPanel" hidden>
+          <div class="mins-chips" id="minsChips"></div>
+          <div class="mins-custom">
+            <label for="pocketMinsInput">or</label>
+            <input class="mins-input" type="number" id="pocketMinsInput" min="1" max="720" step="1" value="15" inputmode="numeric" aria-label="Minutes ago" />
+            <span>min ago</span>
+          </div>
+        </div>
+        <div class="when-panel" id="whenTimePanel" hidden>
+          <div class="when-time-row">
+            <input class="time-input" type="time" id="pocketTimeInput" aria-label="Time you finished" />
+          </div>
+          <div class="when-now-note" style="padding-top:10px">This morning · same day as sunrise</div>
+        </div>
+        <div class="pocket-preview" id="pocketPreview">
+          <div class="pp-amt" id="ppAmt">—</div>
+          <div class="pp-line" id="ppLine">—</div>
+          <div class="pp-note" id="ppNote" hidden></div>
+        </div>
+        <button class="btn btn-primary" id="pocketConfirmBtn" type="button">Pocket</button>
+        <button class="btn" id="pocketCancelBtn" type="button">Cancel</button>
+      </div>
+    </div>
+
+    <!-- Alarm modal -->
+    <div class="modal-back" id="alarmModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <div class="modal">
+        <div class="modal-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 18a5 5 0 0 0-10 0"/><path d="M12 9V2"/><path d="m4.22 10.22 1.42 1.42"/><path d="M1 18h2"/><path d="M21 18h2"/><path d="M18.36 11.64l1.42-1.42"/><path d="M23 22H1"/><path d="m8 6 4-4 4 4"/></svg>
+        </div>
+        <h2 id="modalTitle">Good morning</h2>
+        <p class="m-sub" id="modalLabel">It's time to rise.</p>
+        <div class="m-value" id="modalValue">$0</div>
+        <p class="m-note">is still waiting for you, if you rise now</p>
+        <button class="btn btn-primary" id="dismissBtn" type="button">I'm up — thank you</button>
+        <button class="btn" id="snoozeBtn" type="button">Snooze a little (lose $100,000)</button>
+      </div>
+    </div>
+
+    <script>
+      "use strict";
+
+      /* ================= Tier model ================= */
+      // Anchors: minutes before sunrise -> value (CAD). Exponential decay between anchors.
+      var TIERS = [
+        { name: "Gold",   min: 225, value: 9504367, color: "#e9c677", note: "The First Mark — the fullest morning." },
+        { name: "Silver", min: 177, value: 133438,  color: "#dde2ec", note: "Still deep in the quiet hours." },
+        { name: "Milk",   min: 129, value: 78,      color: "#f6eed9", note: "A soft, steady start." },
+        { name: "Grain",  min: 81,  value: 65,      color: "#ecd28e", note: "Simple and sustaining." },
+        { name: "Water",  min: 0,   value: 0.5,     color: "#93cfe4", note: "Even a sip before sunrise counts." }
+      ];
+
+      var state = {
+        sunrise: defaultSunrise(),   // Date
+        sunriseLabel: "Default · 6:00 AM",
+        sunriseKind: "flat",         // "flat" (6 AM) | "default" (Surrey) | "tz" (time-zone city, approx.) | "live" (exact)
+        live: false,                 // true once an exact sunrise is loaded
+        multiplier: 10,              // reward multiplier — every amount scales by this
+        cycleHours: 6,
+        bufferMin: 15,
+        notifyOn: false,
+        notifyFiredFor: null,
+        alarms: [],                  // {id, time:Date, label, enabled}
+        alarmSeq: 1,
+        firingAlarm: null
+      };
+
+      function defaultSunrise() {
+        var d = new Date();
+        d.setHours(6, 0, 0, 0);
+        if (d.getTime() <= Date.now()) d.setDate(d.getDate() + 1);
+        return d;
+      }
+
+      function anchorTime(tier) { return new Date(state.sunrise.getTime() - tier.min * 60000); }
+      function goldTime() { return anchorTime(TIERS[0]); }
+
+      function valueAt(now) {
+        var t = now.getTime(), sr = state.sunrise.getTime();
+        if (t >= sr) return 0;
+        var m = state.multiplier;
+        var first = anchorTime(TIERS[0]).getTime();
+        if (t <= first) return TIERS[0].value * m;
+        for (var i = 0; i < TIERS.length - 1; i++) {
+          var t1 = anchorTime(TIERS[i]).getTime(), t2 = anchorTime(TIERS[i + 1]).getTime();
+          if (t >= t1 && t < t2) {
+            var f = (t - t1) / (t2 - t1);
+            return TIERS[i].value * Math.pow(TIERS[i + 1].value / TIERS[i].value, f) * m;
+          }
+        }
+        return TIERS[TIERS.length - 1].value * m;
+      }
+
+      function currentTier(now) {
+        var t = now.getTime();
+        if (t >= state.sunrise.getTime()) return null;
+        for (var i = TIERS.length - 1; i >= 0; i--) {
+          if (t >= anchorTime(TIERS[i]).getTime()) return TIERS[i];
+        }
+        return null; // before the window: full Gold value waiting
+      }
+
+      function nextMark(now) {
+        for (var i = 0; i < TIERS.length; i++) {
+          var at = anchorTime(TIERS[i]);
+          if (now.getTime() < at.getTime()) return { tier: TIERS[i], at: at };
+        }
+        return null;
+      }
+
+      function lossPerSecond(now) {
+        return Math.max(0, valueAt(now) - valueAt(new Date(now.getTime() + 1000)));
+      }
+
+      /* ================= Formatting ================= */
+      function fmtMoney(v, decimals) {
+        return "$" + v.toLocaleString("en-CA", {
+          minimumFractionDigits: decimals, maximumFractionDigits: decimals
+        });
+      }
+      function fmtTime(d) {
+        var h = d.getHours(), m = d.getMinutes();
+        var ap = h >= 12 ? "PM" : "AM";
+        var hh = h % 12; if (hh === 0) hh = 12;
+        return hh + ":" + (m < 10 ? "0" : "") + m + " " + ap;
+      }
+      function fmtDur(ms) {
+        if (ms < 0) ms = 0;
+        var s = Math.floor(ms / 1000);
+        var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
+        function p(n) { return (n < 10 ? "0" : "") + n; }
+        return p(h) + ":" + p(m) + ":" + p(ss);
+      }
+      function sameDay(a, b) {
+        return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+      }
+
+      /* ================= DOM refs ================= */
+      function $(id) { return document.getElementById(id); }
+      var els = {
+        heroValue: $("heroValue"), heroDot: $("heroDot"), heroTier: $("heroTier"), heroSub: $("heroSub"),
+        lossWrap: $("lossWrap"), lossMin: $("lossMin"), lossSec: $("lossSec"), lossSecVal: $("lossSecVal"),
+        heroSunrise: $("heroSunrise"), heroCountdown: $("heroCountdown"),
+        ringProg: $("ringProg"), ringSun: $("ringSun"), ringHalo: $("ringHalo"), heroNote: $("heroNote"),
+        greeting: $("greeting"), marksList: $("marksList"), marksHint: $("marksHint"),
+        nextNote: $("nextMarkNote"), locStatus: $("locStatus"), locText: $("locStatusText"),
+        bedtimeBig: $("bedtimeBig"), bedtimeAlt: $("bedtimeAlt"), bufLabel: $("bufLabel")
+      };
+      var RING_C = 2 * Math.PI * 88;
+
+      /* ================= Hero ================= */
+      // Dollars large, cents smaller, then sub-cent digits smaller still —
+      // the fine digits move every frame while the value is easing down.
+      function moneyHTML(v) {
+        var parts = v.toFixed(6).split(".");
+        var dollars = Number(parts[0]).toLocaleString("en-CA");
+        return "$" + dollars +
+          '<span class="cents">.' + parts[1].slice(0, 2) + "</span>" +
+          '<span class="micro">' + parts[1].slice(2) + "</span>";
+      }
+      var lastLossSecond = -1;
+      function render(now) {
+        var v = valueAt(now);
+        var html = moneyHTML(v);
+        els.heroValue.innerHTML = html;
+        var tier = currentTier(now);
+        var past = now.getTime() >= state.sunrise.getTime();
+        // Phase of the day — drives the sky, the hero's intent and which
+        // action leads. "closed": today's sunrise has passed (sunrise has
+        // rolled to tomorrow) and it is still before noon.
+        var openAt = new Date(state.sunrise.getTime() - 360 * 60000);
+        var closedPhase = !past && state.sunrise.getDate() !== now.getDate() && now.getHours() < 12;
+        var phase = past || closedPhase ? "closed" : tier ? "live" : (now.getTime() >= openAt.getTime() ? "open" : "night");
+        if (document.body.getAttribute("data-phase") !== phase) document.body.setAttribute("data-phase", phase);
+        var note = phase === "night" ? "Sleep is how the morning is won."
+          : phase === "open" ? "The window is open — the full value is live."
+          : phase === "live" ? "Any Shnaan before sunrise still counts."
+          : "Rest easy — the next morning is already waiting.";
+        if (els.heroNote.textContent !== note) els.heroNote.textContent = note;
+        var sub = "";
+        if (past) {
+          els.heroTier.textContent = "Sun has risen";
+          els.heroDot.style.background = "#76739c";
+          els.heroDot.style.boxShadow = "none";
+          sub = "A new window opens tonight";
+        } else if (tier) {
+          els.heroTier.textContent = tier.name + " mark";
+          els.heroDot.style.background = tier.color;
+          els.heroDot.style.boxShadow = "";
+          sub = ""; // the loss line below the value carries the rate now
+          if (now.getSeconds() !== lastLossSecond) {
+            lastLossSecond = now.getSeconds();
+            var perMin = valueAt(now) - valueAt(new Date(now.getTime() + 60000));
+            els.lossMin.textContent = perMin >= 0.005 ? "− " + fmtMoney(perMin, 2) + " / min" : "Holding steady";
+            els.lossSecVal.textContent = "− " + fmtMoney(lossPerSecond(now), 2) + " / sec";
+          }
+        } else {
+          els.heroTier.textContent = "Gold awaits";
+          els.heroDot.style.background = TIERS[0].color;
+          els.heroDot.style.boxShadow = "";
+          sub = "Full value until " + fmtTime(goldTime());
+        }
+        if (closedPhase) {
+          els.heroTier.textContent = "Window closed";
+          els.heroDot.style.background = "#8f8bb5";
+          els.heroDot.style.boxShadow = "none";
+          sub = "Next · " + state.sunrise.toLocaleDateString("en-CA", { weekday: "short", month: "short", day: "numeric" }) +
+            " — First Mark " + fmtTime(goldTime()) + " · Sunrise " + fmtTime(state.sunrise);
+        }
+        els.heroSub.textContent = sub;
+        // Loss line only while a mark is live — per minute by default,
+        // per second hidden behind the tap.
+        els.lossWrap.classList.toggle("show", !!tier && !past);
+        els.heroSunrise.textContent = "Sunrise " + fmtTime(state.sunrise);
+        if (past) {
+          els.heroCountdown.textContent = "The sun is up";
+        } else if (closedPhase) {
+          els.heroCountdown.textContent = "Next opportunity " + state.sunrise.toLocaleDateString("en-CA", { weekday: "long" });
+        } else {
+          var remain = state.sunrise.getTime() - now.getTime();
+          var tenth = Math.floor((remain % 1000) / 100);
+          var cd = "in " + fmtDur(remain) + '<span class="tenth">.' + tenth + "</span>";
+          els.heroCountdown.innerHTML = cd;
+        }
+
+        var g = goldTime().getTime(), sr = state.sunrise.getTime();
+        var frac = (now.getTime() - g) / (sr - g);
+        frac = Math.max(0, Math.min(1, frac));
+        els.ringProg.style.strokeDashoffset = (RING_C * (1 - frac)).toFixed(2);
+        var ang = (-90 + frac * 360) * Math.PI / 180;
+        var sunX = (100 + 88 * Math.cos(ang)).toFixed(2), sunY = (100 + 88 * Math.sin(ang)).toFixed(2);
+        els.ringSun.setAttribute("cx", sunX);
+        els.ringSun.setAttribute("cy", sunY);
+        els.ringHalo.setAttribute("cx", sunX);
+        els.ringHalo.setAttribute("cy", sunY);
+
+        var nm = nextMark(now);
+        els.nextNote.textContent = past
+          ? "Today's window has closed gently. Tonight, we begin again."
+          : (nm ? "Next: " + nm.tier.name + " at " + fmtTime(nm.at) + " · in " + fmtDur(nm.at.getTime() - now.getTime()) : "");
+
+        if ($("alarmModal").classList.contains("open")) {
+          $("modalValue").innerHTML = html;
+        }
+      }
+
+      function renderMarks(now) {
+        var html = "";
+        var tier = currentTier(now);
+        var openTime = new Date(state.sunrise.getTime() - 360 * 60000);
+        var openCls = now.getTime() >= state.sunrise.getTime() || (tier && now.getTime() >= openTime.getTime()) ? "done"
+          : (now.getTime() >= openTime.getTime() ? "now" : "");
+        html += '<div class="mark ' + openCls + '">' +
+          '<span class="dot" style="background:#f0a868"></span>' +
+          '<span class="name">Opens</span>' +
+          '<span class="when">' + fmtTime(openTime) + '</span>' +
+          '<span class="tag tag-soft">Window opens</span>' +
+          '<span class="amt">' + fmtMoney(TIERS[0].value * state.multiplier, 0) + '</span></div>';
+        TIERS.forEach(function (t, i) {
+          var at = anchorTime(t);
+          var cls = "";
+          if (now.getTime() >= state.sunrise.getTime() || (tier && TIERS.indexOf(tier) > i) || (tier === t && i < TIERS.length - 1 && now.getTime() >= anchorTime(TIERS[i + 1]).getTime())) cls = "done";
+          if (tier === t) cls = "now";
+          if (!tier && i === 0 && now.getTime() < at.getTime()) cls = "";
+          html += '<div class="mark ' + cls + '">' +
+            '<span class="dot" style="background:' + t.color + '"></span>' +
+            '<span class="name">' + t.name + '</span>' +
+            '<span class="when">' + fmtTime(at) + '</span>' +
+            (i === 0 ? '<span class="tag">First Mark</span>' : '') +
+            '<span class="amt">' + fmtMoney(t.value * state.multiplier, t.value < 1 ? 2 : 0) + '</span>' +
+            '</div>';
+        });
+        html += '<div class="mark' + (now.getTime() >= state.sunrise.getTime() ? " now" : "") + '">' +
+          '<span class="dot" style="background:#76739c"></span>' +
+          '<span class="name">Sunrise</span>' +
+          '<span class="when">' + fmtTime(state.sunrise) + '</span>' +
+          '<span class="amt">$0</span></div>';
+        els.marksList.innerHTML = html;
+        var dayWord = sameDay(state.sunrise, new Date()) ? "Today" :
+          (state.sunrise.getDate() === new Date(Date.now() + 86400000).getDate() ? "Tomorrow" : state.sunrise.toLocaleDateString("en-CA", { weekday: "long" }));
+        els.marksHint.textContent = dayWord + " · sunrise " + fmtTime(state.sunrise) +
+          (state.sunriseKind === "live" ? "" : state.sunriseKind === "tz" ? " (approx.)" : " (default)");
+      }
+
+      function renderGreeting(now) {
+        var h = now.getHours();
+        els.greeting.textContent = h < 4 ? "Still up — rest soon" : h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+      }
+
+      /* ================= Sleep planner ================= */
+      var CYCLES = [9, 7.5, 6, 4.5, 3, 1.5];
+      function bedtime() { return new Date(goldTime().getTime() - state.cycleHours * 3600000); }
+      function windDown() { return new Date(bedtime().getTime() - state.bufferMin * 60000); }
+
+      function renderSleep() {
+        var chips = "";
+        CYCLES.forEach(function (h) {
+          chips += '<button type="button" class="chip' + (h === state.cycleHours ? " sel" : "") + '" data-cycle="' + h + '">' +
+            h + 'h' + (h === 6 ? ' ★' : '') + '</button>';
+        });
+        $("cycleChips").innerHTML = chips;
+        var cyc = $("cycleChips").querySelectorAll("[data-cycle]");
+        for (var i = 0; i < cyc.length; i++) {
+          cyc[i].addEventListener("click", function () {
+            state.cycleHours = parseFloat(this.getAttribute("data-cycle"));
+            state.notifyFiredFor = null;
+            renderSleep();
+          });
+        }
+        els.bufLabel.textContent = state.bufferMin + " min";
+        var wd = windDown(), bt = bedtime();
+        els.bedtimeBig.textContent = fmtTime(wd);
+        els.bedtimeAlt.innerHTML =
+          "In bed by <strong>" + fmtTime(bt) + "</strong><br>" +
+          "Sleep <strong>" + state.cycleHours + "h</strong> · rise for the First Mark at <strong>" + fmtTime(goldTime()) + "</strong>" +
+          (sameDay(wd, new Date()) ? "" : "<br><span style='color:var(--faint)'>(" + wd.toLocaleDateString("en-CA", { weekday: "short" }) + " night)</span>");
+      }
+
+      $("bufMinus").addEventListener("click", function () {
+        state.bufferMin = Math.max(0, state.bufferMin - 5); state.notifyFiredFor = null; renderSleep();
+      });
+      $("bufPlus").addEventListener("click", function () {
+        state.bufferMin = Math.min(60, state.bufferMin + 5); state.notifyFiredFor = null; renderSleep();
+      });
+
+      /* ================= Reward multiplier ================= */
+      var MULT_STEPS = [1, 2, 5, 10, 25, 50, 100];
+      function renderMultiplier() {
+        $("multVal").textContent = "×" + state.multiplier;
+        var idx = MULT_STEPS.indexOf(state.multiplier);
+        $("multMinus").disabled = idx <= 0;
+        $("multPlus").disabled = idx >= MULT_STEPS.length - 1;
+        $("snoozeBtn").textContent = "Snooze a little (lose " + fmtMoney(100000 * state.multiplier, 0) + ")";
+      }
+      function stepMultiplier(dir) {
+        var idx = MULT_STEPS.indexOf(state.multiplier);
+        idx = Math.max(0, Math.min(MULT_STEPS.length - 1, idx + dir));
+        state.multiplier = MULT_STEPS[idx];
+        renderMultiplier();
+        var now = new Date();
+        render(now); renderMarks(now);
+      }
+      $("multMinus").addEventListener("click", function () { stepMultiplier(-1); });
+      $("multPlus").addEventListener("click", function () { stepMultiplier(1); });
+
+      /* ---------- Loss line: tap to reveal per-second ---------- */
+      $("lossLine").addEventListener("click", function () {
+        var open = els.lossSec.classList.toggle("open");
+        this.setAttribute("aria-expanded", open ? "true" : "false");
+        this.setAttribute("aria-label", open ? "Hide loss per second" : "Show loss per second");
+      });
+
+      $("notifyBtn").addEventListener("click", function () {
+        var nt = $("notifyText");
+        if (!("Notification" in window)) {
+          nt.textContent = "Not supported here";
+          return;
+        }
+        if (!state.notifyOn) {
+          var btn = this;
+          Notification.requestPermission().then(function (perm) {
+            if (perm === "granted") {
+              state.notifyOn = true;
+              nt.textContent = "On · " + fmtTime(windDown());
+              btn.classList.add("btn-primary");
+            } else {
+              nt.textContent = "Blocked by browser";
+            }
+          });
+        } else {
+          state.notifyOn = false;
+          nt.textContent = "Remind me";
+          this.classList.remove("btn-primary");
+        }
+      });
+
+      /* ================= Sunrise loading ================= */
+      function setSunrise(date, label, kind) {
+        state.sunrise = date;
+        state.sunriseLabel = label;
+        state.sunriseKind = kind || "live";
+        state.live = state.sunriseKind === "live";
+        state.notifyFiredFor = null;
+        els.locText.textContent = label;
+        els.locStatus.classList.toggle("live", state.live);
+        var now = new Date();
+        render(now); renderMarks(now); renderSleep(); renderPresets(); renderAlarms();
+      }
+
+      /* ---------- On-device sunrise (solar math) ----------
+         The deployed page cannot always reach the sunrise web service, so
+         the sunrise for any coordinates can also be computed right here.
+         Standard solar-position math; lands within ~2 minutes of the
+         reference service — the marks are 48 minutes apart, so the tiers,
+         bedtimes and pocket values are unaffected. */
+      var RAD = Math.PI / 180, DAY_MS = 86400000, J1970 = 2440588, J2000 = 2451545,
+          J0 = 0.0009, OBL = RAD * 23.4397;
+      var sunriseSeq = 0; // newest location request wins; stale answers are dropped
+      function sunriseOn(lat, lon, dayDate) {
+        var lw = RAD * -lon, phi = RAD * lat;
+        var noon = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate(), 12);
+        var d = noon.valueOf() / DAY_MS - 0.5 + J1970 - J2000;
+        var n = Math.round(d - J0 - lw / (2 * Math.PI));
+        var ds = J0 + lw / (2 * Math.PI) + n;
+        var M = RAD * (357.5291 + 0.98560028 * ds);
+        var C = RAD * (1.9148 * Math.sin(M) + 0.02 * Math.sin(2 * M) + 0.0003 * Math.sin(3 * M));
+        var L = M + C + RAD * 102.9372 + Math.PI;
+        var dec = Math.asin(Math.sin(OBL) * Math.sin(L));
+        function transit(x) { return J2000 + x + 0.0053 * Math.sin(M) - 0.0069 * Math.sin(2 * L); }
+        var Jnoon = transit(ds);
+        var cosW = (Math.sin(-0.833 * RAD) - Math.sin(phi) * Math.sin(dec)) /
+                   (Math.cos(phi) * Math.cos(dec));
+        if (cosW < -1 || cosW > 1) return null; // polar day / polar night
+        var w = Math.acos(cosW);
+        var Jset = transit(J0 + (w + lw) / (2 * Math.PI) + n);
+        return new Date((Jnoon - (Jset - Jnoon) + 0.5 - J1970) * DAY_MS);
+      }
+
+      function applySunrise(sr, passed, placeLabel, opts) {
+        var kind = opts.kind || "live";
+        // An exact sunrise (city / geolocation) always beats the time-zone estimate.
+        if (kind === "tz" && state.sunriseKind === "live") return;
+        var label = opts.label ? opts.label(sr, passed)
+          : placeLabel + " · sunrise " + fmtTime(sr) + (passed ? " (tomorrow)" : "");
+        setSunrise(sr, label, kind);
+      }
+
+      function fetchSunrise(lat, lon, placeLabel, opts) {
+        opts = opts || {};
+        var seq = ++sunriseSeq;
+        var localDone = false;
+        function useLocal() {
+          if (localDone || seq !== sunriseSeq) return;
+          localDone = true;
+          var sr = sunriseOn(lat, lon, new Date());
+          var passed = false;
+          if (sr && sr.getTime() <= Date.now()) {
+            var tmr = new Date(); tmr.setDate(tmr.getDate() + 1);
+            sr = sunriseOn(lat, lon, tmr);
+            passed = true;
+          }
+          if (sr) { applySunrise(sr, passed, placeLabel, opts); return; }
+          if (opts.onFail) { opts.onFail(); return; }
+          els.locText.textContent = "Couldn't load that sunrise — keeping the current one.";
+        }
+        // Prefer the reference service when it answers. The moment it fails,
+        // stalls, or is blocked, fall back to the on-device calculation, so
+        // setting a city (or using location) never dead-ends.
+        var timer = setTimeout(useLocal, 5000);
+        function urlFor(d) {
+          var iso = d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate();
+          return "https://api.sunrise-sunset.org/json?lat=" + lat + "&lng=" + lon + "&date=" + iso + "&formatted=0";
+        }
+        function load(d, isRetry) {
+          fetch(urlFor(d)).then(function (r) { return r.json(); }).then(function (j) {
+            if (!j || j.status !== "OK") throw new Error("bad response");
+            var sr = new Date(j.results.sunrise);
+            if (sr.getTime() <= Date.now() && !isRetry) {
+              var tmr = new Date(); tmr.setDate(tmr.getDate() + 1);
+              load(tmr, true);
+              return;
+            }
+            clearTimeout(timer);
+            if (seq !== sunriseSeq) return;
+            applySunrise(sr, !!isRetry, placeLabel, opts);
+          }).catch(function () { clearTimeout(timer); useLocal(); });
+        }
+        load(new Date(), false);
+      }
+
+      /* ---------- Built-in city list ----------
+         Resolved entirely on-device, so Set city works even when the
+         geocoding web service can't be reached from the deployed page.
+         Cities not listed here still go through the web lookup below. */
+      var CITY_LIST = [
+        ["surrey", 49.1913, -122.8490, "Surrey, British Columbia · Canada"],
+        ["vancouver", 49.2827, -123.1207, "Vancouver, British Columbia · Canada"],
+        ["burnaby", 49.2488, -122.9805, "Burnaby, British Columbia · Canada"],
+        ["richmond", 49.1666, -123.1336, "Richmond, British Columbia · Canada"],
+        ["abbotsford", 49.0504, -122.3045, "Abbotsford, British Columbia · Canada"],
+        ["langley", 49.1044, -122.6604, "Langley, British Columbia · Canada"],
+        ["kelowna", 49.8880, -119.4960, "Kelowna, British Columbia · Canada"],
+        ["victoria", 48.4284, -123.3656, "Victoria, British Columbia · Canada"],
+        ["calgary", 51.0447, -114.0719, "Calgary, Alberta · Canada"],
+        ["edmonton", 53.5461, -113.4937, "Edmonton, Alberta · Canada"],
+        ["toronto", 43.6532, -79.3832, "Toronto, Ontario · Canada"],
+        ["brampton", 43.7315, -79.7624, "Brampton, Ontario · Canada"],
+        ["mississauga", 43.5890, -79.6441, "Mississauga, Ontario · Canada"],
+        ["caledon", 43.8659, -79.8254, "Caledon, Ontario · Canada"],
+        ["ottawa", 45.4215, -75.6972, "Ottawa, Ontario · Canada"],
+        ["montreal", 45.5019, -73.5674, "Montreal, Quebec · Canada"],
+        ["winnipeg", 49.8951, -97.1384, "Winnipeg, Manitoba · Canada"],
+        ["regina", 50.4452, -104.6189, "Regina, Saskatchewan · Canada"],
+        ["saskatoon", 52.1332, -106.6700, "Saskatoon, Saskatchewan · Canada"],
+        ["halifax", 44.6488, -63.5752, "Halifax, Nova Scotia · Canada"],
+        ["st johns", 47.5615, -52.7126, "St. John's, Newfoundland and Labrador · Canada"],
+        ["new york", 40.7128, -74.0060, "New York, New York · United States"],
+        ["los angeles", 34.0522, -118.2437, "Los Angeles, California · United States"],
+        ["chicago", 41.8781, -87.6298, "Chicago, Illinois · United States"],
+        ["houston", 29.7604, -95.3698, "Houston, Texas · United States"],
+        ["phoenix", 33.4484, -112.0740, "Phoenix, Arizona · United States"],
+        ["denver", 39.7392, -104.9903, "Denver, Colorado · United States"],
+        ["seattle", 47.6062, -122.3321, "Seattle, Washington · United States"],
+        ["san francisco", 37.7749, -122.4194, "San Francisco, California · United States"],
+        ["san jose", 37.3387, -121.8853, "San Jose, California · United States"],
+        ["fresno", 36.7378, -119.7871, "Fresno, California · United States"],
+        ["sacramento", 38.5816, -121.4944, "Sacramento, California · United States"],
+        ["anchorage", 61.2181, -149.9003, "Anchorage, Alaska · United States"],
+        ["honolulu", 21.3099, -157.8581, "Honolulu, Hawaii · United States"],
+        ["mexico city", 19.4326, -99.1332, "Mexico City · Mexico"],
+        ["london", 51.5074, -0.1278, "London · United Kingdom"],
+        ["paris", 48.8566, 2.3522, "Paris · France"],
+        ["berlin", 52.5200, 13.4050, "Berlin · Germany"],
+        ["madrid", 40.4168, -3.7038, "Madrid · Spain"],
+        ["delhi", 28.6139, 77.2090, "Delhi · India"],
+        ["new delhi", 28.6139, 77.2090, "New Delhi · India"],
+        ["amritsar", 31.6340, 74.8723, "Amritsar, Punjab · India"],
+        ["ludhiana", 30.9000, 75.8573, "Ludhiana, Punjab · India"],
+        ["jalandhar", 31.3260, 75.5762, "Jalandhar, Punjab · India"],
+        ["patiala", 30.3398, 76.3869, "Patiala, Punjab · India"],
+        ["chandigarh", 30.7333, 76.7794, "Chandigarh · India"],
+        ["mumbai", 19.0760, 72.8777, "Mumbai, Maharashtra · India"],
+        ["karachi", 24.8608, 67.0011, "Karachi · Pakistan"],
+        ["lahore", 31.5497, 74.3436, "Lahore · Pakistan"],
+        ["dhaka", 23.8103, 90.4125, "Dhaka · Bangladesh"],
+        ["dubai", 25.2048, 55.2708, "Dubai · United Arab Emirates"],
+        ["singapore", 1.3521, 103.8198, "Singapore"],
+        ["kuala lumpur", 3.1390, 101.6869, "Kuala Lumpur · Malaysia"],
+        ["jakarta", -6.2088, 106.8456, "Jakarta · Indonesia"],
+        ["tokyo", 35.6762, 139.6503, "Tokyo · Japan"],
+        ["shanghai", 31.2304, 121.4737, "Shanghai · China"],
+        ["beijing", 39.9042, 116.4074, "Beijing · China"],
+        ["hong kong", 22.3193, 114.1694, "Hong Kong"],
+        ["seoul", 37.5665, 126.9780, "Seoul · South Korea"],
+        ["sydney", -33.8688, 151.2093, "Sydney, New South Wales · Australia"],
+        ["melbourne", -37.8136, 144.9631, "Melbourne, Victoria · Australia"],
+        ["brisbane", -27.4698, 153.0251, "Brisbane, Queensland · Australia"],
+        ["perth", -31.9505, 115.8605, "Perth, Western Australia · Australia"],
+        ["adelaide", -34.9285, 138.6007, "Adelaide, South Australia · Australia"],
+        ["auckland", -36.8485, 174.7633, "Auckland · New Zealand"]
+      ];
+      function normCityName(s) {
+        return s.toLowerCase().replace(/[.'’]/g, "").replace(/\s+/g, " ").trim();
+      }
+      function findLocalCity(q) {
+        var n = normCityName(q.split(",")[0]);
+        if (!n) return null;
+        var i, c;
+        for (i = 0; i < CITY_LIST.length; i++) { if (CITY_LIST[i][0] === n) return CITY_LIST[i]; }
+        for (i = 0; i < CITY_LIST.length; i++) {
+          c = CITY_LIST[i];
+          if (c[0].indexOf(n) === 0 || n.indexOf(c[0]) === 0) return c;
+        }
+        return null;
+      }
+      /* Shared city resolution — built-in list first (on-device), then the
+         web geocoder. Set city and the Surrey default below both go through
+         this one repaired lookup. onMiss(true) means the lookup couldn't be
+         reached; onMiss(false) means no such place was found. */
+      function resolveCity(q, onFound, onMiss) {
+        var local = findLocalCity(q);
+        if (local) { onFound({ lat: local[1], lon: local[2], label: local[3] }); return; }
+        fetch("https://geocoding-api.open-meteo.com/v1/search?name=" + encodeURIComponent(q) + "&count=1&language=en&format=json")
+          .then(function (r) { if (!r.ok) throw new Error("lookup failed"); return r.json(); })
+          .then(function (j) {
+            if (!j.results || !j.results.length) { onMiss(false); return; }
+            var p = j.results[0];
+            onFound({ lat: p.latitude, lon: p.longitude,
+              label: p.name + (p.admin1 ? ", " + p.admin1 : "") + (p.country ? " · " + p.country : "") });
+          })
+          .catch(function () { onMiss(true); });
+      }
+
+      /* ---------- Smart default: sunrise for the device's time-zone city ---------- */
+      var TZ_CITIES = {
+        "America/Vancouver": "Vancouver", "America/Toronto": "Toronto", "America/Montreal": "Montreal",
+        "America/New_York": "New York", "America/Los_Angeles": "Los Angeles", "America/Chicago": "Chicago",
+        "America/Edmonton": "Edmonton", "America/Winnipeg": "Winnipeg", "America/Halifax": "Halifax",
+        "America/Denver": "Denver", "America/Phoenix": "Phoenix", "America/Anchorage": "Anchorage",
+        "America/St_Johns": "St. John's", "America/Mexico_City": "Mexico City",
+        "Pacific/Honolulu": "Honolulu",
+        "Europe/London": "London", "Europe/Paris": "Paris", "Europe/Berlin": "Berlin", "Europe/Madrid": "Madrid",
+        "Asia/Kolkata": "Delhi", "Asia/Karachi": "Karachi", "Asia/Dhaka": "Dhaka", "Asia/Dubai": "Dubai",
+        "Asia/Singapore": "Singapore", "Asia/Tokyo": "Tokyo", "Asia/Shanghai": "Shanghai",
+        "Asia/Hong_Kong": "Hong Kong", "Asia/Seoul": "Seoul", "Asia/Jakarta": "Jakarta",
+        "Australia/Sydney": "Sydney", "Australia/Melbourne": "Melbourne", "Australia/Brisbane": "Brisbane",
+        "Australia/Perth": "Perth", "Australia/Adelaide": "Adelaide", "Pacific/Auckland": "Auckland"
+      };
+      function initTimezoneSunrise() {
+        var tz = "";
+        try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) {}
+        if (!tz) return; // unknown zone — stay on the 6:00 AM default
+        var city = TZ_CITIES[tz] || tz.split("/").pop().replace(/_/g, " ").trim();
+        if (!city) return;
+        if (state.sunriseKind === "flat") {
+          els.locText.textContent = "Checking the sunrise for your time zone…";
+        }
+        var tzLabel = function (sr, passed) {
+          return "Sunrise for your time zone · " + city + " (approx.) " + fmtTime(sr) +
+            (passed ? " tomorrow" : "") + " — add your city for exact";
+        };
+        var tzFail = function () {
+          if (state.sunriseKind === "flat") {
+            els.locText.textContent = "Default · sunrise 6:00 AM — add your city for your real sunrise.";
+          }
+        };
+        // Built-in list first: the time-zone default resolves fully on-device.
+        var local = findLocalCity(city);
+        if (local) {
+          fetchSunrise(local[1], local[2], null, { kind: "tz", label: tzLabel, onFail: tzFail });
+          return;
+        }
+        fetch("https://geocoding-api.open-meteo.com/v1/search?name=" + encodeURIComponent(city) + "&count=1&language=en&format=json")
+          .then(function (r) { if (!r.ok) throw new Error("lookup failed"); return r.json(); })
+          .then(function (j) {
+            if (!j.results || !j.results.length) { tzFail(); return; }
+            var p = j.results[0];
+            fetchSunrise(p.latitude, p.longitude, null, { kind: "tz", label: tzLabel, onFail: tzFail });
+          })
+          .catch(function () { tzFail(); });
+      }
+
+      /* ---------- Default city: Surrey, BC ----------
+         First load lands on Surrey's sunrise until the user enters their
+         own city or shares location. Goes through the same repaired lookup
+         as Set city; if Surrey itself can't be resolved, the time-zone
+         default runs next, then the flat 6:00 AM default. */
+      function initDefaultCity() {
+        if (state.sunriseKind === "flat") {
+          els.locText.textContent = "Loading your default city · Surrey…";
+        }
+        resolveCity("Surrey", function (place) {
+          fetchSunrise(place.lat, place.lon, null, {
+            kind: "default",
+            label: function (sr, passed) {
+              return "Default city · Surrey · sunrise " + fmtTime(sr) +
+                (passed ? " (tomorrow)" : "");
+            },
+            onFail: function () { initTimezoneSunrise(); }
+          });
+        }, function () { initTimezoneSunrise(); });
+      }
+
+      $("geoBtn").addEventListener("click", function () {
+        if (!navigator.geolocation) {
+          els.locText.textContent = "Location isn't available here — type your city instead.";
+          return;
+        }
+        els.locText.textContent = "Finding you…";
+        navigator.geolocation.getCurrentPosition(function (pos) {
+          fetchSunrise(pos.coords.latitude.toFixed(4), pos.coords.longitude.toFixed(4), "Your location");
+        }, function () {
+          els.locText.textContent = "Location was blocked — type your city, or keep the current sunrise.";
+        }, { timeout: 10000 });
+      });
+
+      function searchCity() {
+        var q = $("cityInput").value.trim();
+        if (!q) return;
+        if (!findLocalCity(q)) els.locText.textContent = "Looking up " + q + "…";
+        resolveCity(q, function (place) {
+          fetchSunrise(place.lat, place.lon, place.label);
+        }, function (networkFailed) {
+          els.locText.textContent = networkFailed
+            ? "City lookup didn't go through — try a nearby large city (those set on-device), or check your connection."
+            : "Couldn't find “" + q + "” — check the spelling, or try a nearby large city.";
+        });
+      }
+      $("cityBtn").addEventListener("click", searchCity);
+      $("cityInput").addEventListener("keydown", function (e) { if (e.key === "Enter") searchCity(); });
+
+      // Default city first: Surrey's sunrise. The time-zone default and the
+      // flat 6:00 AM default sit behind it as fallbacks. Geolocation (below)
+      // or an entered city then replaces it with the exact local sunrise.
+      initDefaultCity();
+
+      // Try auto-location quietly on load; the Surrey default covers any failure.
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(function (pos) {
+          fetchSunrise(pos.coords.latitude.toFixed(4), pos.coords.longitude.toFixed(4), "Your location");
+        }, function () { /* stay on default, silently */ }, { timeout: 8000 });
+      }
+
+      /* ================= Pocket the loot & balance ================= */
+      // Saved on this device only (localStorage, best effort) so the balance
+      // and daily history are still here when the page is reopened.
+      var POCKET_KEY = "amritvela.pockets.v1";
+      var pockets = loadPockets();
+      var balanceVisible = false; // balance stays hidden until the eye is tapped
+      var EYE_ON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>';
+      var EYE_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c6.5 0 10 8 10 8a18.5 18.5 0 0 1-2.16 3.19"/><path d="M6.61 6.61A13.53 13.53 0 0 0 2 12s3 8 10 8a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" y1="2" x2="22" y2="22"/><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/></svg>';
+
+      function loadPockets() {
+        try {
+          var raw = localStorage.getItem(POCKET_KEY);
+          if (!raw) return [];
+          var arr = JSON.parse(raw);
+          if (!Array.isArray(arr)) return [];
+          return arr.filter(function (e) { return e && typeof e.amount === "number" && typeof e.ts === "number" && e.tier; });
+        } catch (e) { return []; }
+      }
+      function savePockets() {
+        try { localStorage.setItem(POCKET_KEY, JSON.stringify(pockets)); } catch (e) { /* storage unavailable — keep in memory */ }
+      }
+      function dayKey(ts) {
+        var d = new Date(ts);
+        return d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate();
+      }
+      function todayEntry() {
+        var k = dayKey(Date.now());
+        for (var i = 0; i < pockets.length; i++) {
+          if (dayKey(pockets[i].ts) === k) return pockets[i];
+        }
+        return null;
+      }
+      function totalBalance() {
+        return pockets.reduce(function (s, e) { return s + e.amount; }, 0);
+      }
+      function amtDec(v) { return v > 0 && v < 100 ? 2 : 0; }
+
+      function renderPocket() {
+        var btn = $("pocketBtn"), conf = $("pocketConfirm");
+        var entry = todayEntry();
+        if (entry) {
+          btn.disabled = true;
+          btn.textContent = "Pocketed for today";
+          conf.hidden = false;
+          conf.classList.remove("dim");
+          conf.textContent = "Pocketed " + fmtMoney(entry.amount, amtDec(entry.amount)) + " · " + entry.tier +
+            " · " + fmtTime(new Date(entry.ts)) + " — it's in your balance below.";
+        } else if (valueAt(new Date()) <= 0) {
+          // Still allow opening the popup — they may have finished earlier,
+          // before sunrise, and are only tapping now.
+          btn.disabled = false;
+          btn.textContent = "Shnaan done — Pocket the loot";
+          conf.hidden = false;
+          conf.classList.add("dim");
+          conf.textContent = "The sun is up — if you finished earlier, you can still pocket for that time.";
+        } else {
+          btn.disabled = false;
+          btn.textContent = "Shnaan done — Pocket the loot";
+          conf.hidden = true;
+          conf.textContent = "";
+        }
+        var n = pockets.length;
+        $("handleDays").textContent = n ? n + (n === 1 ? " day" : " days") + " pocketed" : "No days yet";
+      }
+
+      function renderSheet() {
+        var bal = totalBalance();
+        $("balAmt").textContent = balanceVisible ? fmtMoney(bal, amtDec(bal)) : "••••••";
+        $("eyeBtn").innerHTML = balanceVisible ? EYE_OFF : EYE_ON;
+        $("eyeBtn").setAttribute("aria-label", balanceVisible ? "Hide balance" : "Show balance");
+        var n = pockets.length;
+        $("balDays").textContent = n + (n === 1 ? " day pocketed" : " days pocketed");
+        var list = $("histList");
+        if (!n) {
+          list.innerHTML = '<div class="empty">Nothing pocketed yet — your first morning is waiting.</div>';
+          return;
+        }
+        var todayK = dayKey(Date.now());
+        var html = "";
+        pockets.forEach(function (e, idx) {
+          var d = new Date(e.ts);
+          var isToday = dayKey(e.ts) === todayK;
+          var dateLbl = isToday ? "Today" : d.toLocaleDateString("en-CA", { weekday: "short", month: "short", day: "numeric" });
+          var color = "#e9c677";
+          TIERS.forEach(function (t) { if (t.name === e.tier) color = t.color; });
+          html += '<div class="hist-item">' +
+            '<span class="dot" style="background:' + color + '"></span>' +
+            '<span class="h-main"><span class="h-date">' + dateLbl + '</span>' +
+            '<span class="h-sub">' + e.tier + " · " + fmtTime(d) + '</span></span>' +
+            '<span class="h-amt">' + fmtMoney(e.amount, amtDec(e.amount)) + '</span>' +
+            (isToday ? '<button type="button" class="undo-btn" data-undo="' + idx + '">Undo</button>' : '') +
+            '</div>';
+        });
+        list.innerHTML = html;
+        var undos = list.querySelectorAll("[data-undo]");
+        for (var i = 0; i < undos.length; i++) {
+          undos[i].addEventListener("click", function () {
+            pockets.splice(parseInt(this.getAttribute("data-undo"), 10), 1);
+            savePockets();
+            renderPocket();
+            renderSheet();
+          });
+        }
+      }
+
+      function openSheet() {
+        renderSheet();
+        $("sheet").classList.add("open");
+        $("sheetBack").classList.add("open");
+      }
+      function closeSheet() {
+        $("sheet").classList.remove("open");
+        $("sheetBack").classList.remove("open");
+      }
+      $("sheetHandle").addEventListener("click", openSheet);
+      $("sheetClose").addEventListener("click", closeSheet);
+      $("sheetBack").addEventListener("click", closeSheet);
+      document.addEventListener("keydown", function (e) { if (e.key === "Escape") { closeSheet(); if (typeof closePocketModal === "function") closePocketModal(); } });
+      // Swipe down on the sheet to tuck it away again.
+      var sheetTouchY = null;
+      $("sheet").addEventListener("touchstart", function (e) { sheetTouchY = e.touches[0].clientY; }, { passive: true });
+      $("sheet").addEventListener("touchend", function (e) {
+        if (sheetTouchY === null) return;
+        var dy = e.changedTouches[0].clientY - sheetTouchY;
+        sheetTouchY = null;
+        if (dy > 70) closeSheet();
+      }, { passive: true });
+
+      $("eyeBtn").addEventListener("click", function () {
+        balanceVisible = !balanceVisible;
+        renderSheet();
+      });
+
+      /* ---------- Pocket: when did you finish? ---------- */
+      // Tapping Done no longer pockets instantly — it opens the popup below
+      // and the amount is the value at the claimed completion time.
+      var MIN_PRESETS = [5, 10, 15, 20, 30, 45, 60];
+      var pocketMode = "now"; // "now" | "ago" | "time"
+      var pocketMins = 15;
+      var pocketPreviewTimer = null;
+
+      function tierAtTime(d) {
+        if (d.getTime() >= state.sunrise.getTime()) return null;
+        if (d.getTime() <= goldTime().getTime()) return TIERS[0];
+        return currentTier(d) || TIERS[0];
+      }
+      function entryForTime(d) {
+        var k = dayKey(d.getTime());
+        for (var i = 0; i < pockets.length; i++) {
+          if (dayKey(pockets[i].ts) === k) return pockets[i];
+        }
+        return null;
+      }
+      function completionForMode() {
+        var now = new Date();
+        if (pocketMode === "now") return now;
+        if (pocketMode === "ago") return new Date(now.getTime() - pocketMins * 60000);
+        var v = $("pocketTimeInput").value;
+        if (!v) return null;
+        var parts = v.split(":");
+        // That time on today's date — the date of the current morning window.
+        return new Date(now.getFullYear(), now.getMonth(), now.getDate(),
+          parseInt(parts[0], 10), parseInt(parts[1], 10), 0, 0);
+      }
+      function pocketPreview() {
+        var comp = completionForMode();
+        if (!comp) return null;
+        var val = valueAt(comp);
+        var tier = tierAtTime(comp);
+        return { time: comp, value: val, tier: tier };
+      }
+      function whenPhrase() {
+        if (pocketMode === "now") return "done now";
+        if (pocketMode === "ago") return "done " + pocketMins + " min ago";
+        return "done at that time";
+      }
+      function renderMinsChips() {
+        var html = "";
+        MIN_PRESETS.forEach(function (m) {
+          html += '<button type="button" class="chip' + (m === pocketMins ? " sel" : "") + '" data-mins="' + m + '">' + m + ' min</button>';
+        });
+        $("minsChips").innerHTML = html;
+        var btns = $("minsChips").querySelectorAll("[data-mins]");
+        for (var i = 0; i < btns.length; i++) {
+          btns[i].addEventListener("click", function () {
+            pocketMins = parseInt(this.getAttribute("data-mins"), 10);
+            $("pocketMinsInput").value = pocketMins;
+            renderMinsChips();
+            renderPocketPreview();
+          });
+        }
+      }
+      function setPocketMode(mode) {
+        pocketMode = mode;
+        var tabs = document.querySelectorAll(".when-tab");
+        for (var i = 0; i < tabs.length; i++) {
+          tabs[i].classList.toggle("sel", tabs[i].getAttribute("data-when") === mode);
+        }
+        $("whenNowPanel").hidden = mode !== "now";
+        $("whenAgoPanel").hidden = mode !== "ago";
+        $("whenTimePanel").hidden = mode !== "time";
+        renderPocketPreview();
+      }
+      function renderPocketPreview() {
+        var pv = pocketPreview();
+        var confirmBtn = $("pocketConfirmBtn");
+        var box = $("pocketPreview");
+        if (!pv) {
+          $("ppAmt").textContent = "Pick a time";
+          $("ppLine").textContent = "Choose the time you finished.";
+          $("ppNote").hidden = true;
+          confirmBtn.disabled = true;
+          confirmBtn.textContent = "Pocket";
+          box.classList.remove("closed");
+          return;
+        }
+        var dup = entryForTime(pv.time);
+        var closed = pv.value <= 0 || !pv.tier;
+        box.classList.toggle("closed", closed);
+        $("ppAmt").textContent = fmtMoney(pv.value, amtDec(pv.value));
+        if (closed) {
+          $("ppLine").textContent = (pv.tier ? pv.tier.name : "After sunrise") + " · " + whenPhrase() + " · " + fmtTime(pv.time);
+          var note = $("ppNote");
+          note.hidden = false;
+          note.textContent = "That window had closed by " + fmtTime(pv.time) + " — nothing to pocket for that time.";
+          confirmBtn.disabled = true;
+          confirmBtn.textContent = "Pocket $0";
+          return;
+        }
+        $("ppLine").textContent = pv.tier.name + " · " + whenPhrase() + " · " + fmtTime(pv.time);
+        var note2 = $("ppNote");
+        if (dup) {
+          note2.hidden = false;
+          note2.textContent = "Already pocketed for that morning — one pocket per day.";
+          confirmBtn.disabled = true;
+          confirmBtn.textContent = "Already pocketed";
+        } else if (pv.time.getTime() <= goldTime().getTime()) {
+          note2.hidden = false;
+          note2.textContent = "Before the First Mark — full Gold value.";
+          confirmBtn.disabled = false;
+          confirmBtn.textContent = "Pocket " + fmtMoney(pv.value, amtDec(pv.value)) + " — " + pv.tier.name + ", " + whenPhrase() + ", " + fmtTime(pv.time);
+        } else {
+          note2.hidden = true;
+          confirmBtn.disabled = false;
+          confirmBtn.textContent = "Pocket " + fmtMoney(pv.value, amtDec(pv.value)) + " — " + pv.tier.name + ", " + whenPhrase() + ", " + fmtTime(pv.time);
+        }
+      }
+      function openPocketModal() {
+        if (todayEntry() && pocketMode === "now") { /* still open so they can see why */ }
+        pocketMode = "now";
+        pocketMins = 15;
+        $("pocketMinsInput").value = 15;
+        var now = new Date();
+        var hh = now.getHours(), mm = now.getMinutes();
+        $("pocketTimeInput").value = (hh < 10 ? "0" : "") + hh + ":" + (mm < 10 ? "0" : "") + mm;
+        renderMinsChips();
+        setPocketMode("now");
+        $("pocketModal").classList.add("open");
+        if (pocketPreviewTimer) clearInterval(pocketPreviewTimer);
+        // Keep the "now" / "mins ago" preview live while the popup is open.
+        pocketPreviewTimer = setInterval(function () {
+          if (pocketMode !== "time") renderPocketPreview();
+        }, 1000);
+      }
+      function closePocketModal() {
+        $("pocketModal").classList.remove("open");
+        if (pocketPreviewTimer) { clearInterval(pocketPreviewTimer); pocketPreviewTimer = null; }
+      }
+      document.querySelectorAll(".when-tab").forEach(function (tab) {
+        tab.addEventListener("click", function () { setPocketMode(this.getAttribute("data-when")); });
+      });
+      $("pocketMinsInput").addEventListener("input", function () {
+        var v = parseInt(this.value, 10);
+        if (!isNaN(v)) {
+          pocketMins = Math.max(1, Math.min(720, v));
+          renderMinsChips();
+        }
+        renderPocketPreview();
+      });
+      $("pocketMinsInput").addEventListener("change", function () {
+        this.value = pocketMins;
+        renderPocketPreview();
+      });
+      $("pocketTimeInput").addEventListener("input", renderPocketPreview);
+      $("pocketTimeInput").addEventListener("change", renderPocketPreview);
+      $("pocketCancelBtn").addEventListener("click", closePocketModal);
+      $("pocketModal").addEventListener("click", function (e) { if (e.target === this) closePocketModal(); });
+      $("pocketConfirmBtn").addEventListener("click", function () {
+        var pv = pocketPreview();
+        if (!pv || pv.value <= 0 || !pv.tier) return;
+        if (entryForTime(pv.time)) return; // one pocket per morning
+        pockets.unshift({
+          ts: pv.time.getTime(),
+          amount: Math.round(pv.value * 100) / 100,
+          tier: pv.tier.name
+        });
+        pockets.sort(function (a, b) { return b.ts - a.ts; });
+        savePockets();
+        var heroEl = document.querySelector(".hero");
+        heroEl.classList.remove("just-pocketed");
+        void heroEl.offsetWidth;
+        heroEl.classList.add("just-pocketed");
+        setTimeout(function () { heroEl.classList.remove("just-pocketed"); }, 1700);
+        closePocketModal();
+        renderPocket();
+        openSheet(); // show them exactly where the loot landed
+      });
+
+      $("pocketBtn").addEventListener("click", function () {
+        if (todayEntry()) return; // one pocket per day — button already shows Pocketed
+        openPocketModal();
+      });
+
+      /* ================= Alarms ================= */
+      function fmtAlarmLabel(a) { return a.label; }
+
+      function renderAlarms() {
+        var list = $("alarmList");
+        if (!state.alarms.length) {
+          list.innerHTML = '<div class="empty">No alarms yet — pick a quick set above.</div>';
+          return;
+        }
+        var html = "";
+        state.alarms.slice().sort(function (a, b) { return a.time - b.time; }).forEach(function (a) {
+          html += '<div class="alarm-item' + (a.enabled ? "" : " off") + '">' +
+            '<span class="t">' + fmtTime(a.time) + '</span>' +
+            '<span class="l">' + fmtAlarmLabel(a) + '</span>' +
+            '<label class="switch sm"><input type="checkbox" data-toggle="' + a.id + '"' + (a.enabled ? " checked" : "") + ' aria-label="Toggle alarm"><span class="track"></span></label>' +
+            '<button type="button" class="x" data-del="' + a.id + '" aria-label="Remove alarm">×</button></div>';
+        });
+        list.innerHTML = html;
+        var dels = list.querySelectorAll("[data-del]");
+        for (var i = 0; i < dels.length; i++) {
+          dels[i].addEventListener("click", function () {
+            var id = parseInt(this.getAttribute("data-del"), 10);
+            state.alarms = state.alarms.filter(function (a) { return a.id !== id; });
+            renderAlarms();
+          });
+        }
+        var togs = list.querySelectorAll("[data-toggle]");
+        for (var j = 0; j < togs.length; j++) {
+          togs[j].addEventListener("change", function () {
+            var id = parseInt(this.getAttribute("data-toggle"), 10);
+            var on = this.checked;
+            state.alarms.forEach(function (a) { if (a.id === id) a.enabled = on; });
+            var item = this.closest ? this.closest(".alarm-item") : null;
+            if (item) item.classList.toggle("off", !on);
+          });
+        }
+      }
+
+      function addAlarm(time, label) {
+        state.alarms.push({ id: state.alarmSeq++, time: time, label: label, enabled: true, fired: false });
+        renderAlarms();
+      }
+
+      function renderPresets() {
+        var g = goldTime();
+        var presets = [
+          { label: "15 min before Gold", sub: "15 Minutes Before Gold Cutoff", time: new Date(g.getTime() - 15 * 60000) },
+          { label: "At Gold · First Mark", sub: "Gold Cutoff", time: new Date(g.getTime()) },
+          { label: "At Silver", sub: "Silver Mark", time: anchorTime(TIERS[1]) },
+          { label: "At Milk", sub: "Milk Mark", time: anchorTime(TIERS[2]) }
+        ];
+        var html = "";
+        presets.forEach(function (p, i) {
+          html += '<button type="button" class="chip" data-preset="' + i + '">' + p.label + ' · ' + fmtTime(p.time) + '</button>';
+        });
+        $("presetChips").innerHTML = html;
+        var btns = $("presetChips").querySelectorAll("[data-preset]");
+        for (var i = 0; i < btns.length; i++) {
+          btns[i].addEventListener("click", function () {
+            var p = presets[parseInt(this.getAttribute("data-preset"), 10)];
+            addAlarm(new Date(p.time.getTime()), p.sub);
+          });
+        }
+      }
+
+      $("customBtn").addEventListener("click", function () {
+        var v = $("customTime").value;
+        if (!v) return;
+        var parts = v.split(":");
+        var d = new Date();
+        d.setHours(parseInt(parts[0], 10), parseInt(parts[1], 10), 0, 0);
+        if (d.getTime() <= Date.now()) d.setDate(d.getDate() + 1);
+        addAlarm(d, "Custom alarm");
+      });
+
+      $("alarmMaster").addEventListener("change", function () {
+        $("alarmPanel").classList.toggle("disabled", !this.checked);
+      });
+
+      /* ---------- Alarm sound (gentle chime) ---------- */
+      var audioCtx = null, chimeTimer = null;
+      function ensureAudio() {
+        if (!audioCtx) {
+          try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { audioCtx = null; }
+        }
+        if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+        return audioCtx;
+      }
+      function chimeOnce() {
+        var ctx = ensureAudio();
+        if (!ctx) return;
+        var notes = [523.25, 659.25, 783.99];
+        notes.forEach(function (f, i) {
+          var o = ctx.createOscillator(), g = ctx.createGain();
+          o.type = "sine"; o.frequency.value = f;
+          var t0 = ctx.currentTime + i * 0.35;
+          g.gain.setValueAtTime(0.0001, t0);
+          g.gain.exponentialRampToValueAtTime(0.18, t0 + 0.05);
+          g.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.4);
+          o.connect(g); g.connect(ctx.destination);
+          o.start(t0); o.stop(t0 + 1.5);
+        });
+      }
+      function startChime() { chimeOnce(); chimeTimer = setInterval(chimeOnce, 4000); }
+      function stopChime() { if (chimeTimer) { clearInterval(chimeTimer); chimeTimer = null; } }
+
+      function fireAlarm(alarm) {
+        state.firingAlarm = alarm;
+        $("modalLabel").textContent = alarm.label + " · " + fmtTime(new Date());
+        $("alarmModal").classList.add("open");
+        render(new Date());
+        startChime();
+        if ("Notification" in window && Notification.permission === "granted") {
+          try { new Notification("Amritvela — time to rise", { body: alarm.label }); } catch (e) {}
+        }
+      }
+      function closeModal() {
+        $("alarmModal").classList.remove("open");
+        stopChime();
+        state.firingAlarm = null;
+      }
+      $("dismissBtn").addEventListener("click", closeModal);
+      $("snoozeBtn").addEventListener("click", function () {
+        var a = state.firingAlarm;
+        closeModal();
+        if (a) addAlarm(new Date(Date.now() + 5 * 60000), a.label + " (snoozed)");
+      });
+      $("testBtn").addEventListener("click", function () {
+        fireAlarm({ label: "Test alarm", time: new Date() });
+      });
+
+      /* ================= Main loop ================= */
+      function tick() {
+        var now = new Date();
+        renderPocket(); // flips the pocket button at sunrise / midnight
+        // Bedtime reminder
+        if (state.notifyOn && "Notification" in window && Notification.permission === "granted") {
+          var wd = windDown();
+          var key = wd.toISOString();
+          if (state.notifyFiredFor !== key && Math.abs(now.getTime() - wd.getTime()) < 30000 && now.getTime() >= wd.getTime()) {
+            state.notifyFiredFor = key;
+            try { new Notification("Time to wind down", { body: "Bedtime target " + fmtTime(bedtime()) + " — rise for the First Mark at " + fmtTime(goldTime()) + "." }); } catch (e) {}
+          }
+        }
+        // Alarms
+        if ($("alarmMaster").checked) {
+          state.alarms.forEach(function (a) {
+            if (a.enabled && !a.fired && now.getTime() >= a.time.getTime() && now.getTime() - a.time.getTime() < 60000) {
+              a.fired = true;
+              fireAlarm(a);
+              renderAlarms();
+            }
+          });
+        }
+      }
+
+      // Hero value runs on requestAnimationFrame so the cents move continuously;
+      // alarms and the bedtime reminder check once a second; marks refresh slowly.
+      var now0 = new Date();
+      renderMultiplier();
+      renderGreeting(now0); render(now0); renderMarks(now0); renderSleep(); renderPresets(); renderAlarms();
+      renderPocket(); renderSheet();
+      function frame() { render(new Date()); requestAnimationFrame(frame); }
+      requestAnimationFrame(frame);
+      setInterval(tick, 1000);
+      setInterval(function () { var n = new Date(); renderMarks(n); renderGreeting(n); }, 30000);
+    </script>
+  </body>
+</html>
