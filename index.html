@@ -124,7 +124,21 @@ main{container-type:inline-size;flex:1 1 auto;min-height:0;min-width:0;overflow-
 .value-num{font-size:clamp(22px,7.2vw,28px);font-weight:500;color:var(--ink);line-height:1.15;max-width:100%;white-space:nowrap;letter-spacing:-.01em}
 .night-value{font-size:clamp(44px,13vw,60px);font-weight:600;line-height:1.05;letter-spacing:-.02em}
 .dawn-level-row{display:flex;font-size:13px;color:var(--muted)}
-.pinned-finish{position:sticky;bottom:12px;z-index:20;margin-top:16px;box-shadow:0 10px 28px rgba(94,72,32,.22)}
+/* Pinned finish (D6) — a NON-scrolling flex child of the fixed .frame,
+   sitting between <main> and the tab bar. It is not inside the scroll
+   column at all, so no scroll position can carry it away; because it
+   takes flex space, <main> shrinks and no content is ever hidden
+   behind it. It lives in normal flow inside the frame, so the scrim
+   (z40), sheets (z50), guide/reveal overlays (z60) and alarm popup
+   (z70) all paint above it. Horizontal padding mirrors <main> at
+   every breakpoint so the button aligns to the centred column. */
+.pinned-finish-bar{flex:0 0 auto;padding:10px 24px 12px;background:var(--canvas)}
+.pinned-finish-bar[hidden]{display:none}
+.pinned-finish-bar .btn-primary{box-shadow:0 10px 28px rgba(94,72,32,.22)}
+:root[data-theme="dark"] .pinned-finish-bar .btn-primary{box-shadow:0 10px 28px rgba(0,0,0,.4)}
+.pinned-finish-note{text-align:center;margin:8px 0 0}
+@media (min-width:640px){.pinned-finish-bar{padding-left:32px;padding-right:32px}}
+@media (min-width:1024px){.pinned-finish-bar{padding-left:40px;padding-right:40px}}
 /* Night instrument (Critic N) — gold budget at night: level fill + finish button + sun marker only. */
 .night-phase{font-family:var(--serif);font-size:20px;line-height:1.25;color:var(--ink);margin:0}
 .seg-strip{display:flex;overflow:hidden;margin:16px 0 8px;gap:2px;height:54px;border-radius:18px}
@@ -245,7 +259,7 @@ html[data-intro="show"] #guide{display:block !important}
   *,*::before,*::after{transition:none !important;animation:none !important}
 }
 .sheet,.scrim{transition:transform .25s ease,opacity .25s ease}
-.frame,.card,.tabbar,.sheet,.btn-primary,.btn-secondary,.place-chip,.theme-btn{transition:background-color 1.2s ease-in-out,color 1.2s ease-in-out,border-color 1.2s ease-in-out}
+.frame,.card,.tabbar,.sheet,.btn-primary,.btn-secondary,.place-chip,.theme-btn,.pinned-finish-bar{transition:background-color 1.2s ease-in-out,color 1.2s ease-in-out,border-color 1.2s ease-in-out}
 .headline-fixed{min-height:110px;display:flex;align-items:flex-start}
 .rot-line{font-style:italic;display:block;transition:opacity 1.4s ease-in-out,transform 1.4s ease-in-out}
 .rot-line.rot-out{opacity:0;transform:translateY(-4px)}
@@ -328,8 +342,14 @@ html[data-intro="show"] #guide{display:block !important}
   .place-chip{font-size:13px;padding:10px 12px}
   .sleep-art{height:72px}
 }
-.today-side{display:none}
+.today-side{display:block}
 @media (max-width:1023px){
+  .today-grid{display:flex;flex-direction:column}
+  .today-art{order:0}
+  .today-main{order:1}
+  .today-window{order:2}
+  .today-side{order:3;margin-top:20px}
+  .today-foot{order:4}
   .sleep-grid{display:flex;flex-direction:column}
   .sleep-left,.sleep-right{display:contents}
   .sl-art{order:0}
@@ -360,7 +380,7 @@ html[data-intro="show"] #guide{display:block !important}
 .g-dots span.on{background:var(--gold)}
 .guide-actions{display:flex;align-items:center;gap:14px}
 .guide-actions .btn-primary{flex:1}
-.today-window{display:none;margin-top:20px}
+.today-window{display:block;margin-top:20px}
 .today-window.night{display:block}
 .spacious p{font-size:17px;line-height:1.65}
 
@@ -409,9 +429,10 @@ html[data-intro="show"] #guide{display:block !important}
   .value-num{font-size:40px}
   .sleep-hero-time{font-size:44px}
   .next-alarm-time{font-size:44px}
-  .today-grid{display:grid;grid-template-columns:55fr 45fr;gap:10px 36px;grid-template-areas:"art art" "main side" "window window";align-items:start}
+  .today-grid{display:grid;grid-template-columns:55fr 45fr;gap:10px 36px;grid-template-areas:"art art" "main side" "window window" "foot foot";align-items:start}
   .today-art{grid-area:art}
   .today-main{grid-area:main;min-width:0}
+  .today-foot{grid-area:foot}
   .today-side{display:block;grid-area:side;padding-top:10px}
   .today-window{display:block;grid-area:window;margin-top:22px}
   .today-window .window-strip{margin-top:24px}
@@ -533,6 +554,10 @@ html[data-intro="show"] #guide{display:block !important}
     <section class="screen" data-screen="place"></section>
     <section class="screen" data-screen="marks"></section>
   </main>
+  <div class="pinned-finish-bar" id="pinnedFinishBar" hidden>
+    <button type="button" class="btn-primary" id="finishBtnPinned">I finished Shnaan</button>
+    <p class="small pinned-finish-note" id="pinnedFinishNote" hidden>Finishing is off in preview — nothing is recorded.</p>
+  </div>
   <nav class="tabbar" id="tabbar" aria-label="Main">
     <button type="button" class="tab" data-goes="today"></button>
     <button type="button" class="tab" data-goes="sleep"></button>
@@ -970,8 +995,22 @@ var TAB_DEFS=[{id:"today",label:"Today",icon:IC.today},{id:"sleep",label:"Sleep"
     tab.addEventListener("click",function(){ showScreen(d.id); });
   });
 })();
+/* Pinned finish (D6) — the bar is a static frame child (see markup);
+   renderToday only syncs its visibility/state. Modes: "live" (night,
+   tappable), "preview" (Night Preview — shown pinned but disabled),
+   anything else hides it. It never shows off the Today screen. */
+function syncPinnedFinish(mode){
+  var bar=$("pinnedFinishBar"); if(!bar) return;
+  var btn=$("finishBtnPinned"); var note=$("pinnedFinishNote");
+  var show=(mode==="live"||mode==="preview") && state.screen==="today";
+  bar.hidden=!show;
+  if(show && btn){ var pv=mode==="preview"; btn.disabled=pv; btn.style.opacity=pv?".45":""; }
+  if(show && note) note.hidden=mode!=="preview";
+}
+$("finishBtnPinned").addEventListener("click",function(){ openFinishSheet("morning"); });
 function showScreen(name){
   state.screen=name;
+  if(name!=="today") syncPinnedFinish("hide");
   document.querySelectorAll(".screen").forEach(function(s){ s.classList.toggle("active", s.getAttribute("data-screen")===name); });
   document.querySelectorAll("#tabbar .tab").forEach(function(t,i){ var on=TAB_DEFS[i].id===name; t.classList.toggle("active",on); if(on) t.setAttribute("aria-current","page"); else t.removeAttribute("aria-current"); });
   $("main").scrollTop=0; renderScreen(name);
@@ -1035,15 +1074,18 @@ function startRotation(phaseId,lines){
 function renderToday(){
   var el=screenEl("today"); var now=simNow();
   if(state.sunUnavailable){
+    syncPinnedFinish("hide");
     el.innerHTML='<div class="hero"><h1 class="display">No sunrise today at this place.</h1><p class="quiet-line">At some places and times of year, the sun does not rise \u2014 so there is no window to count today. Your mornings and settings are safe.</p></div>';
     return;
   }
   if(!state.sunToday){
+    syncPinnedFinish("hide");
     el.innerHTML='<div class="hero"><h1 class="display">First light is coming.</h1><p class="quiet-line">'+(state.sunError?"Couldn\u2019t work out sunrise — try again soon.":"Working out sunrise\u2026")+'</p></div>';
     return;
   }
   var preview=state.preview;
   if(!preview && !ctx(now)){
+    syncPinnedFinish("hide");
     el.innerHTML='<div class="hero"><h1 class="display">First light is coming.</h1><p class="quiet-line">Working out sunrise\u2026</p></div>';
     return;
   }
@@ -1103,7 +1145,7 @@ function renderToday(){
   } else if(ph.id==="recorded"){
     headline="Kept. Waheguru.";
     quiet='<p class="quiet-line">'+winLabel(ph.entry.mark)+' · finished <span class="tnum">'+fmtTime(new Date(ph.entry.ts))+'</span></p>';
-    statusText="Saved this morning"; valueHtml=valueBlock(ph.entry.amount,statusText);
+    statusText="Saved this morning"; lastMoney=ph.entry.amount; valueHtml=valueBlock(ph.entry.amount,statusText);
     moreText="For the Gold window, Shnaan done by "+fmtTime(finishByFor(S,"Gold"))+".";
     btn='<button type="button" class="btn-primary" data-nav="record">See my mornings</button>';
   } else {
@@ -1137,7 +1179,8 @@ function renderToday(){
     +'</div>';
   var previewNoticeHtml=state.previewNotice?'<p class="small" role="status" style="margin:10px 0 0;color:var(--gold-text)">'+esc(state.previewNotice)+'</p>':"";
   var previewNote=preview?'<p class="small" style="margin:10px 0 0">Preview — not tonight\u2019s real times. <button type="button" class="link-btn" id="endPreview" style="min-height:44px;padding:4px">End preview</button></p>':"";
-  if(preview) btn='<button type="button" class="btn-primary" disabled style="opacity:.45">I finished Shnaan</button><p class="small" style="text-align:center;margin:8px 0 0">Finishing is off in preview \u2014 nothing is recorded.</p>';
+  /* Preview night: the finish button lives in the pinned bar too
+     (disabled, with its note) — no in-flow copy. */
   var lines=PHASE_LINES[ph.id]||PHASE_LINES.daytime;
   if(rotPhase!==ph.id){ rotPhase=ph.id; rotIndex=0; }
   if(rotIndex>=lines.length) rotIndex=0;
@@ -1149,17 +1192,21 @@ function renderToday(){
   var heroHead=isNightEarly
     ? '<div class="hero"><p class="night-phase" id="nightPhaseWord">'+esc(phaseWord)+'</p>'+quiet+'</div>'
     : '<div class="hero"><h1 class="display headline-fixed"><span class="rot-line" id="rotLine">'+esc(lines[rotIndex])+'</span></h1>'+quiet+'</div>';
-  var pinnedHtml=(isNightEarly&&!preview)?'<div class="pinned-finish"><button type="button" class="btn-primary" id="finishBtnPinned">I finished Shnaan</button></div>':"";
-  var btnOut=(isNightEarly&&!preview)?"":btn;
+  /* D6: in the night phases (live or Night Preview) the finish button
+     is the pinned frame bar, never an in-flow element. */
+  syncPinnedFinish(isNightEarly?(preview?"preview":"live"):"hide");
+  var btnOut=isNightEarly?"":btn;
   var guideLabel=(settings.guideVersionSeen||0)>=GUIDE_VERSION?"How this works":'<span aria-hidden="true" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--gold);vertical-align:2px;margin-right:6px"></span>Start here <span aria-hidden="true" style="display:inline-block;transform:rotate(180deg);vertical-align:-3px">'+IC.back+'</span>';
+  var footHtml='<div class="today-foot">'
+    +promptHtml
+    +'<p style="margin:14px 0 0"><button type="button" class="why-open" id="whyBtn">Why?</button></p>'
+    +'<p style="margin:20px 0 4px"><button type="button" class="link-btn" id="guideLink">'+guideLabel+'</button><button type="button" class="link-btn" id="previewLink" style="margin-left:14px">Preview tonight</button></p>'
+    +'</div>';
   el.innerHTML='<div class="today-grid">'+(isNightEarly?"":'<div class="today-art">'+art+'</div>')+'<div class="today-main">'
     +heroHead
     +valueHtml+btnOut+tonightHtml+streakHtml
-    +previewNote+previewNoticeHtml+promptHtml
-    +'<p style="margin:14px 0 0"><button type="button" class="why-open" id="whyBtn">Why?</button></p>'
-    +'<p style="margin:20px 0 4px"><button type="button" class="link-btn" id="guideLink">'+guideLabel+'</button><button type="button" class="link-btn" id="previewLink" style="margin-left:14px">Preview tonight</button></p>'
-    +pinnedHtml
-    +'</div>'+sideHtml+bandHtml+'</div>';
+    +previewNote+previewNoticeHtml
+    +'</div>'+sideHtml+bandHtml+footHtml+'</div>';
   var ep=$("endPreview");
   if(ep) ep.addEventListener("click",function(){ state.preview=null; renderToday(); });
   var ll=$("lossLine");
@@ -1189,7 +1236,8 @@ function renderToday(){
   var pvL=$("previewLink"); if(pvL) pvL.addEventListener("click",function(){ state.returnTo="today"; state.focusPreview=true; showScreen("place"); });
   var px=$("placePromptX"); if(px) px.addEventListener("click",function(){ settings.onboarded=true; saveSettings(); renderToday(); });
   var fb=$("finishBtn"); if(fb) fb.addEventListener("click",function(){ openFinishSheet("morning"); });
-  var fbp=$("finishBtnPinned"); if(fbp) fbp.addEventListener("click",function(){ openFinishSheet("morning"); });
+  /* #finishBtnPinned is the static frame bar — its click is wired once
+     in the shell code, not per render. */
   var rb=$("recoverBtn"); if(rb) rb.addEventListener("click",function(){ openFinishSheet("recovery"); });
   var vt=$("valueTap");
   if(vt) vt.addEventListener("click",function(){ if(isWaiting) return; var m=$("valueMore"); if(!m) return; m.textContent=moreText; m.hidden=!m.hidden; });
@@ -1360,7 +1408,15 @@ function renderAlarms(){
     sw.addEventListener("change",function(){ var id=parseInt(sw.getAttribute("data-customtoggle"),10); settings.customAlarms.forEach(function(a){ if(a.id===id) a.enabled=sw.checked; }); saveSettings(); renderAlarms(); });
   });
   el.querySelectorAll("[data-customdel]").forEach(function(btn){
-    btn.addEventListener("click",function(){ var id=parseInt(btn.getAttribute("data-customdel"),10); settings.customAlarms=settings.customAlarms.filter(function(a){ return a.id!==id; }); saveSettings(); renderAlarms(); });
+    btn.addEventListener("click",function(){
+      if(btn.getAttribute("data-armed")!=="1"){
+        el.querySelectorAll("[data-customdel]").forEach(function(x){ x.removeAttribute("data-armed"); x.textContent="\u00D7"; x.style.width=""; });
+        btn.setAttribute("data-armed","1"); btn.textContent="Remove?"; btn.style.width="auto"; btn.style.fontSize="13px";
+        setTimeout(function(){ if(btn.isConnected){ btn.removeAttribute("data-armed"); btn.textContent="\u00D7"; btn.style.width=""; } },3000);
+        return;
+      }
+      var id=parseInt(btn.getAttribute("data-customdel"),10); settings.customAlarms=settings.customAlarms.filter(function(a){ return a.id!==id; }); saveSettings(); renderAlarms();
+    });
   });
   $("addAlarmBtn").addEventListener("click",openAddAlarmSheet);
   $("testAlarmBtn").addEventListener("click",function(){ ensureAudio(); fireAlarm("Time to rise \u2014 Gold window","Finish Shnaan now and this morning counts in the Gold window.","test"); });
@@ -1715,7 +1771,7 @@ function startLiveToday(S,phaseId){
   var live=(phaseId==="open"||phaseId==="declining");
   var numEl=document.getElementById("valueNum");
   var target0=live?valueAt(simNow(),S):(numEl?parseFloat(numEl.getAttribute("data-val"))||0:0);
-  if(lastMoney==null||prefersReduced()) lastMoney=target0;
+  if(lastMoney==null||prefersReduced()||phaseId==="recorded") lastMoney=target0;
   var tweenFrom=lastMoney, tweenStart=null, tweening=!live && Math.abs(target0-tweenFrom)>0.01;
   var prevTs=null, lastSec=-1;
   function frame(ts){
@@ -1869,10 +1925,12 @@ function renderRecord(){
 /* ================= PLACE ================= */
 function searchCities(q,cb){
   var gen=++searchGen;
-  fetch("https://geocoding-api.open-meteo.com/v1/search?name="+encodeURIComponent(q)+"&count=5&language=en&format=json")
+  var ctrl=("AbortController" in window)?new AbortController():null;
+  var to=ctrl?setTimeout(function(){ try{ctrl.abort();}catch(e){} },6000):null;
+  fetch("https://geocoding-api.open-meteo.com/v1/search?name="+encodeURIComponent(q)+"&count=5&language=en&format=json", ctrl?{signal:ctrl.signal}:undefined)
     .then(function(r){ return r.json(); })
-    .then(function(j){ if(gen!==searchGen) return; cb((j&&j.results)||[]); })
-    .catch(function(){ if(gen!==searchGen) return; cb(null); });
+    .then(function(j){ if(to) clearTimeout(to); if(gen!==searchGen) return; cb((j&&j.results)||[]); })
+    .catch(function(){ if(to) clearTimeout(to); if(gen!==searchGen) return; cb(null); });
 }
 function placeLabel(p){ return p.name+(p.admin1?", "+p.admin1:"")+(p.country?", "+p.country:""); }
 function applyPlace(p,isDefault){
@@ -1951,7 +2009,7 @@ function renderPlace(){
   var input=$("placeSearch");
   var doSearch=function(){
     var q=input.value.trim(); if(!q) return;
-    $("placeResults").innerHTML='<p class="small">Looking up '+esc(q)+'\u2026</p>';
+    $("placeResults").innerHTML='<p class="small">Searching\u2026</p>';
     searchCities(q,function(results){
       var box=$("placeResults"); if(!box) return;
       if(results===null){ box.innerHTML='<p class="small" style="color:var(--gold-text)">City lookup didn\u2019t go through — try again.</p>'; return; }
