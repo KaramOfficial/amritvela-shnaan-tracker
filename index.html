@@ -1021,6 +1021,57 @@ function planFor(sunrise){
   var windDown=new Date(asleepBy.getTime()-settings.bufferMin*60000);
   return { sunrise:sunrise, wake:wake, finishBy:finishBy, asleepBy:asleepBy, windDown:windDown, open:windowOpen(sunrise) };
 }
+/* ============ Tonight, from now — options computed from this moment ============
+   The plan above assumes the evening went to plan. This answers the real
+   question when it didn't: given the time right now, what is the best move?
+   Row 1: asleep now, highest window still reachable with a real sleep.
+   Row 2: what waiting two hours costs (same wake, same reward, less sleep).
+   Row 3: what trading down one window buys (more sleep, smaller reward).
+   Pure function of now + sunrise; renderToday re-runs every 30 seconds,
+   so the advice moves with the clock. */
+function fmtDurHM(mins){
+  mins=Math.max(0,Math.round(mins));
+  var h=Math.floor(mins/60), m=mins%60;
+  if(h<=0) return m+" min";
+  return m? h+"h "+(m<10?"0":"")+m+"m" : h+"h";
+}
+function tonightOptions(now,S){
+  var MIN_SLEEP=120; /* minutes — below this it is a nap, not a night's plan */
+  function durTo(mark,asleepAt){ return (bufferedWakeFor(S,mark).getTime()-asleepAt.getTime())/60000; }
+  function tierVal(mark){ for(var j=0;j<TIERS.length;j++) if(TIERS[j].name===mark) return TIERS[j].value*MULT; return 0; }
+  var best=null;
+  for(var i=0;i<MARK_ORDER.length;i++){ if(durTo(MARK_ORDER[i],now)>=MIN_SLEEP){ best=MARK_ORDER[i]; break; } }
+  if(!best) best=MARK_ORDER[0];
+  function row(asleepAt,mark,tag){
+    return { asleepAt:asleepAt, mark:mark, wake:bufferedWakeFor(S,mark), dur:durTo(mark,asleepAt), value:tierVal(mark), tag:tag };
+  }
+  var full=(best==="Gold"), rows=[];
+  rows.push(row(now,best, full?"Most sleep · Full reward":"Most sleep · Best left"));
+  var later=new Date(now.getTime()+120*60000);
+  if(durTo(best,later)>=MIN_SLEEP) rows.push(row(later,best,(full?"Full reward":"Same reward")+" · Less sleep"));
+  var bi=MARK_ORDER.indexOf(best);
+  if(bi>=0 && bi<MARK_ORDER.length-1){
+    var down=MARK_ORDER[bi+1];
+    if(durTo(down,now)>=MIN_SLEEP) rows.push(row(now,down,"More sleep · "+down));
+  }
+  return rows;
+}
+function tonightFromNowHTML(now,S,plan){
+  var rows=tonightOptions(now,S);
+  if(!rows.length) return "";
+  var h='<div class="card" style="margin:14px 0 0"><p class="card-label">Tonight, from now</p>';
+  if(now.getTime()>plan.asleepBy.getTime()) h+='<p class="quiet-line" style="margin:0 0 2px">Asleep by <span class="tnum">'+fmtTime(plan.asleepBy)+'</span> — that time has passed.</p>';
+  rows.forEach(function(r){
+    var asleepTxt=(r.asleepAt.getTime()===now.getTime())?"now":fmtTime(r.asleepAt);
+    h+='<div class="row-line">'
+      +'<div class="grow"><div><strong>Asleep '+asleepTxt+'</strong> · <span class="tnum" style="white-space:nowrap">'+fmtDurHM(r.dur)+'</span> sleep</div>'
+      +'<div class="small" style="color:var(--muted)">Wake <span class="tnum">'+fmtTime(r.wake)+'</span> · '+esc(winLabel(r.mark))+'</div></div>'
+      +'<div style="text-align:right;flex:none"><div class="tnum" style="font-weight:600">'+fmtStatic(r.value)+'</div>'
+      +'<div class="small" style="color:var(--muted)">'+esc(r.tag)+'</div></div>'
+      +'</div>';
+  });
+  return h+'</div>';
+}
 function ctx(now){
   if(!state.sunToday||!state.sunTomorrow) return null;
   var srT=state.sunToday, srTm=state.sunTomorrow;
@@ -1284,6 +1335,9 @@ function renderToday(){
      is the pinned frame bar, never an in-flow element. */
   syncPinnedFinish(isNightEarly?(preview?"preview":"live"):"hide");
   var btnOut=isNightEarly?"":btn;
+  /* Dynamic from-now advice: evening/night arc only (never in preview,
+     never once the window is live or the morning is decided). */
+  var fromNowHtml=(!preview && (ph.id==="night"||ph.id==="winddown"||ph.id==="sleep"))?tonightFromNowHTML(now,S,plan):"";
   var guideLabel=(settings.guideVersionSeen||0)>=GUIDE_VERSION?"How this works":'<span aria-hidden="true" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--gold);vertical-align:2px;margin-right:6px"></span>Start here <span aria-hidden="true" style="display:inline-block;transform:rotate(180deg);vertical-align:-3px">'+IC.back+'</span>';
   var footHtml='<div class="today-foot">'
     +promptHtml
@@ -1295,7 +1349,7 @@ function renderToday(){
       ? dayPhaseWord+valueHtml+dayCaption+dayFinishLine+btnOut+tonightHtml+streakHtml
       : heroHead+valueHtml+btnOut+tonightHtml+streakHtml)
     +previewNote+previewNoticeHtml
-    +'</div>'+sideHtml+bandHtml+footHtml+'</div>';
+    +'</div>'+sideHtml+bandHtml+fromNowHtml+footHtml+'</div>';
   var ep=$("endPreview");
   if(ep) ep.addEventListener("click",function(){ state.preview=null; renderToday(); });
   var ll=$("lossLine");
