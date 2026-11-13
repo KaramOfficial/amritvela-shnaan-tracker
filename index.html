@@ -1021,12 +1021,20 @@ function planFor(sunrise){
   var windDown=new Date(asleepBy.getTime()-settings.bufferMin*60000);
   return { sunrise:sunrise, wake:wake, finishBy:finishBy, asleepBy:asleepBy, windDown:windDown, open:windowOpen(sunrise) };
 }
-/* ============ Tonight, from now — options computed from this moment ============
+/* ============ Tonight, from now - cycle-intelligent options ============
    The plan above assumes the evening went to plan. This answers the real
    question when it didn't: given the time right now, what is the best move?
-   Row 1: asleep now, highest window still reachable with a real sleep.
-   Row 2: what waiting two hours costs (same wake, same reward, less sleep).
-   Row 3: what trading down one window buys (more sleep, smaller reward).
+   Rules (2026-11-12):
+   - Sleep counts only in whole 90-minute cycles - 1.5h, 3h, 4.5h \u2026
+     A short night drops whole cycles, never part of one. Minimum plan
+     is one cycle (1.5h), replacing the old flat 2h minimum.
+   - Buffers are budgeted, not fixed: wind-down and Shnaan keep the
+     user's preferred lengths while time allows (more is better) and
+     shrink only to buy a whole extra cycle, never below their floors
+     - wind-down 5 min, Shnaan 10 min. Minutes left after fitting the
+     cycles go back to the buffers (split evenly) up to the preferred
+     lengths; any true slack just lets wind-down start that much later.
+   - Every row budgets all three parts: wind-down + sleep + Shnaan.
    Pure function of now + sunrise; renderToday re-runs every 30 seconds,
    so the advice moves with the clock. */
 function fmtDurHM(mins){
@@ -1035,37 +1043,67 @@ function fmtDurHM(mins){
   if(h<=0) return m+" min";
   return m? h+"h "+(m<10?"0":"")+m+"m" : h+"h";
 }
+var CYCLE_MIN=90, MIN_WIND=5, MIN_SHNAAN=10;
+function prefWindMin(){ return settings.bufferMin==null?30:settings.bufferMin; }
+function prefShnaanMin(){ return settings.morningBuffer==null?30:settings.morningBuffer; }
+function tierValueFor(mark){ for(var j=0;j<TIERS.length;j++) if(TIERS[j].name===mark) return TIERS[j].value*MULT; return 0; }
+function fitTonight(startAt,S,mark){
+  var finishBy=finishByFor(S,mark);
+  var total=Math.round((finishBy.getTime()-startAt.getTime())/60000); /* whole minutes \u2014 the app plans and displays to the minute */
+  var cycles=Math.floor((total-MIN_WIND-MIN_SHNAAN)/CYCLE_MIN);
+  if(cycles<1) return null;
+  var budget=total-cycles*CYCLE_MIN;
+  var wind=MIN_WIND, shnaan=MIN_SHNAAN, extra=budget-wind-shnaan;
+  var addS=Math.min(Math.ceil(extra/2),Math.max(0,prefShnaanMin()-shnaan)); shnaan+=addS; extra-=addS;
+  var addW=Math.min(extra,Math.max(0,prefWindMin()-wind)); wind+=addW; extra-=addW;
+  if(extra>0){ var addS2=Math.min(extra,Math.max(0,prefShnaanMin()-shnaan)); shnaan+=addS2; extra-=addS2; }
+  var wake=new Date(finishBy.getTime()-shnaan*60000);
+  var asleepAt=new Date(wake.getTime()-cycles*CYCLE_MIN*60000);
+  var windDownAt=new Date(asleepAt.getTime()-wind*60000);
+  return { mark:mark, finishBy:finishBy, wake:wake, asleepAt:asleepAt, windDownAt:windDownAt,
+    cycles:cycles, dur:cycles*CYCLE_MIN, wind:wind, shnaan:shnaan, slack:extra,
+    shrunk:(wind<prefWindMin()||shnaan<prefShnaanMin()), value:tierValueFor(mark), tag:"" };
+}
+function bestFitAt(startAt,S){
+  for(var i=0;i<MARK_ORDER.length;i++){ var f=fitTonight(startAt,S,MARK_ORDER[i]); if(f) return f; }
+  return null;
+}
 function tonightOptions(now,S){
-  var MIN_SLEEP=120; /* minutes — below this it is a nap, not a night's plan */
-  function durTo(mark,asleepAt){ return (bufferedWakeFor(S,mark).getTime()-asleepAt.getTime())/60000; }
-  function tierVal(mark){ for(var j=0;j<TIERS.length;j++) if(TIERS[j].name===mark) return TIERS[j].value*MULT; return 0; }
-  var best=null;
-  for(var i=0;i<MARK_ORDER.length;i++){ if(durTo(MARK_ORDER[i],now)>=MIN_SLEEP){ best=MARK_ORDER[i]; break; } }
-  if(!best) best=MARK_ORDER[0];
-  function row(asleepAt,mark,tag){
-    return { asleepAt:asleepAt, mark:mark, wake:bufferedWakeFor(S,mark), dur:durTo(mark,asleepAt), value:tierVal(mark), tag:tag };
-  }
-  var full=(best==="Gold"), rows=[];
-  rows.push(row(now,best, full?"Most sleep · Full reward":"Most sleep · Best left"));
+  var rows=[];
+  var best=bestFitAt(now,S);
+  if(!best) return rows;
+  best.tag=(best.mark==="Gold"?"Full reward":"Best left");
+  rows.push(best);
   var later=new Date(now.getTime()+120*60000);
-  if(durTo(best,later)>=MIN_SLEEP) rows.push(row(later,best,(full?"Full reward":"Same reward")+" · Less sleep"));
-  var bi=MARK_ORDER.indexOf(best);
+  var laterFit=fitTonight(later,S,best.mark);
+  if(laterFit){
+    if(laterFit.cycles<best.cycles){ laterFit.tag="Same reward \u00B7 Less sleep"; rows.push(laterFit); }
+    else if(laterFit.shrunk && !best.shrunk){ laterFit.tag="Same sleep \u00B7 Tighter buffers"; rows.push(laterFit); }
+  } else {
+    var laterBest=bestFitAt(later,S);
+    if(laterBest && laterBest.mark!==best.mark){ laterBest.tag="Waiting drops to "+laterBest.mark; rows.push(laterBest); }
+  }
+  var bi=MARK_ORDER.indexOf(best.mark);
   if(bi>=0 && bi<MARK_ORDER.length-1){
-    var down=MARK_ORDER[bi+1];
-    if(durTo(down,now)>=MIN_SLEEP) rows.push(row(now,down,"More sleep · "+down));
+    var down=fitTonight(now,S,MARK_ORDER[bi+1]);
+    if(down && down.wake.getTime()>best.wake.getTime()){ down.tag="More sleep \u00B7 "+down.mark; rows.push(down); }
   }
   return rows;
 }
 function tonightFromNowHTML(now,S,plan){
   var rows=tonightOptions(now,S);
-  if(!rows.length) return "";
   var h='<div class="card" style="margin:14px 0 0"><p class="card-label">Tonight, from now</p>';
-  if(now.getTime()>plan.asleepBy.getTime()) h+='<p class="quiet-line" style="margin:0 0 2px">Asleep by <span class="tnum">'+fmtTime(plan.asleepBy)+'</span> — that time has passed.</p>';
+  if(!rows.length){
+    return h+'<p class="quiet-line" style="margin:0">No full sleep cycle left tonight. Any rest still counts \u2014 rise by <span class="tnum">'+fmtTime(bufferedWakeFor(S,"Water"))+'</span> for the Water window.</p></div>';
+  }
+  if(now.getTime()>plan.asleepBy.getTime()) h+='<p class="quiet-line" style="margin:0 0 2px">Asleep by <span class="tnum">'+fmtTime(plan.asleepBy)+'</span> \u2014 that time has passed.</p>';
   rows.forEach(function(r){
-    var asleepTxt=(r.asleepAt.getTime()===now.getTime())?"now":fmtTime(r.asleepAt);
+    var wdTxt=(Math.abs(r.windDownAt.getTime()-now.getTime())<60000)?"now":fmtTime(r.windDownAt);
     h+='<div class="row-line">'
-      +'<div class="grow"><div><strong>Asleep '+asleepTxt+'</strong> · <span class="tnum" style="white-space:nowrap">'+fmtDurHM(r.dur)+'</span> sleep</div>'
-      +'<div class="small" style="color:var(--muted)">Wake <span class="tnum">'+fmtTime(r.wake)+'</span> · '+esc(winLabel(r.mark))+'</div></div>'
+      +'<div class="grow"><div><strong>Wind down '+wdTxt+'</strong> \u00B7 <span class="tnum" style="white-space:nowrap">'+fmtDurHM(r.dur)+'</span> sleep \u00B7 '+r.cycles+(r.cycles===1?" cycle":" cycles")+'</div>'
+      +'<div class="small" style="color:var(--muted)">Asleep <span class="tnum">'+fmtTime(r.asleepAt)+'</span> \u00B7 Wake <span class="tnum">'+fmtTime(r.wake)+'</span> \u00B7 '+esc(winLabel(r.mark))+'</div>'
+      +(r.shrunk?'<div class="small" style="color:var(--muted)">Buffers trimmed: wind down <span class="tnum">'+r.wind+' min</span> \u00B7 Shnaan <span class="tnum">'+r.shnaan+' min</span></div>':"")
+      +'</div>'
       +'<div style="text-align:right;flex:none"><div class="tnum" style="font-weight:600">'+fmtStatic(r.value)+'</div>'
       +'<div class="small" style="color:var(--muted)">'+esc(r.tag)+'</div></div>'
       +'</div>';
@@ -1409,7 +1447,7 @@ function renderSleep(){
     +'<div><span class="ch-icon">'+IC.basin+'</span><span class="ch-label">Shnaan done by</span><span class="ch-time tnum">'+fmtTime(plan.finishBy)+'</span></div>'
     +'</div></div>'
     +'<div class="sleep-right"><div class="sleep-cards sl-tiles">';
-  [6,7.5,9].forEach(function(h){
+  [9,7.5,6,4.5,3,1.5].forEach(function(h){
     var sel=settings.sleepHours===h;
     html+='<button type="button" class="sleep-card'+(sel?" sel":"")+'" data-sleephours="'+h+'"><span class="sc-main">'+sleepText(h)+'</span><span class="sc-sub"><span class="sc-asleep">Asleep </span><span class="tnum">'+fmtTime(new Date(plan.wake.getTime()-h*3600000))+'</span></span></button>';
   });
@@ -1418,14 +1456,14 @@ function renderSleep(){
   html+='</div></div>'
     +'<div class="sl-buffers" style="margin-top:22px"><p class="card-label">Time around your sleep</p>'
     +'<div class="buffer-row"><span class="buffer-label">Wind down before sleep</span><div class="buffer-opts">'
-    +[15,30,45,60].map(function(v){ return '<button type="button" class="buffer-opt'+(settings.bufferMin===v?" sel":"")+'" data-windbuffer="'+v+'">'+v+' min</button>'; }).join("")
+    +[5,15,30,45,60].map(function(v){ return '<button type="button" class="buffer-opt'+(settings.bufferMin===v?" sel":"")+'" data-windbuffer="'+v+'">'+v+' min</button>'; }).join("")
     +'</div></div>'
     +'<div class="buffer-row"><span class="buffer-label">Time for Shnaan</span><span class="small" style="display:block">the dawn bath</span><div class="buffer-opts">'
-    +[15,30,45,60].map(function(v){ return '<button type="button" class="buffer-opt'+((settings.morningBuffer==null?30:settings.morningBuffer)===v?" sel":"")+'" data-morningbuffer="'+v+'">'+v+' min</button>'; }).join("")
+    +[10,15,30,45,60].map(function(v){ return '<button type="button" class="buffer-opt'+((settings.morningBuffer==null?30:settings.morningBuffer)===v?" sel":"")+'" data-morningbuffer="'+v+'">'+v+' min</button>'; }).join("")
     +'</div></div></div>'
     +'<div class="card sl-remind"><div class="row-line" style="padding:0"><div class="grow"><strong>Remind me to wind down'+(masterOn()?"":" \u2014 alarms are off in Alarms")+'</strong></div>'
     +'<label class="switch"><input type="checkbox" id="windToggle" aria-label="Remind me to wind down"'+(settings.windReminder?" checked":"")+'><span class="track"></span></label></div></div>';
-  var isCustom=[6,7.5,9].indexOf(settings.sleepHours)<0;
+  var isCustom=[9,7.5,6,4.5,3,1.5].indexOf(settings.sleepHours)<0;
   var bridgeSum=alarmSummaryFor(S);
   if(bridgeSum && bridgeSum.length){
     html+='<div class="sleep-bridge sl-bridge"><p class="quiet-line" style="margin:0">'+esc(winLabel(bridgeSum[0].mark))+' wake alarm is on for <span class="tnum">'+fmtTime(bridgeSum[0].time)+'</span>.</p></div>';
@@ -1452,8 +1490,8 @@ function renderSleep(){
   var det=$("otherLen");
   if(det) det.addEventListener("toggle",function(){ otherLenOpen=det.open; });
   var step=function(dir){
-    var h=Math.round((settings.sleepHours+dir*0.5)*2)/2;
-    h=Math.max(4.5,Math.min(10.5,h));
+    var h=Math.round((settings.sleepHours+dir*1.5)/1.5)*1.5; /* whole 90-minute cycles only */
+    h=Math.max(1.5,Math.min(10.5,h));
     settings.sleepHours=h; saveSettings(); otherLenOpen=true; renderSleep();
   };
   var lm=$("lenMinus"), lp=$("lenPlus");
@@ -1467,7 +1505,8 @@ function renderSleep(){
       { v:IC.sleep, t:"Sleep runs in <strong>cycles of about ninety minutes</strong> \u2014 light sleep, then deep." },
       { v:IC.sun, t:"These lengths end at the end of a cycle, so <strong>waking up feels easier</strong>." },
       { v:IC.today, t:"Your <strong>wake time never changes</strong> \u2014 a longer sleep just means an earlier bedtime." },
-      { v:IC.sleep, t:"Pick the <strong>longest length</strong> your evening honestly allows." },
+      { v:IC.sleep, t:"Pick the <strong>longest length</strong> your evening honestly allows. On a short night, drop a whole cycle \u2014 <strong>4\u00BD, 3, even 1\u00BD hours</strong> \u2014 never part of one." },
+      { v:IC.wind, t:"Wind-down and Shnaan time sit <strong>around</strong> the sleep. They stay generous while time allows, and trim only to save a whole cycle \u2014 never below <strong>5 minutes</strong> to wind down and <strong>10 minutes</strong> for Shnaan." },
       { v:IC.alarms, t:EXPLAIN.plan.body }
     ],{ sectionTitle:"Tonight\u2019s five windows", sectionHtml:windowStripHTML(S,new Date()), sectionChunks:[{ v:IC.sun, t:'The six hours before sunrise hold the five windows. '+esc(explainWindowBody()) }] });
   });
