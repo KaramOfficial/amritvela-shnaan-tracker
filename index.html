@@ -325,6 +325,19 @@ html[data-intro="show"] #guide{display:block !important}
 .window-sec{margin-top:30px}
 .window-title{font-family:var(--serif);font-weight:400;font-size:22px;line-height:1.25;color:var(--ink);margin:0}
 .window-strip{margin-top:22px}
+.ws-band-seg{display:flex;overflow:hidden;background:var(--sunken)}
+.ws-seg{display:block;height:100%}
+.ws-rows{margin-top:6px}
+.ws-row{display:flex;align-items:center;gap:10px;padding:9px 6px;border-bottom:1px solid var(--hair)}
+.ws-row:last-child{border-bottom:none}
+.ws-glyph{flex:none;line-height:0}
+.ws-r-main{flex:1;min-width:0;display:flex;flex-direction:column}
+.ws-r-name{font-weight:600;font-size:15.5px;color:var(--ink);display:flex;align-items:center;gap:8px}
+.ws-now{font-size:11.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--gold-text)}
+.ws-r-times{font-size:14px;color:var(--muted);margin-top:1px;white-space:nowrap}
+.ws-r-val{font-weight:600;white-space:nowrap;color:var(--ink)}
+.ws-row.passed{opacity:.45}
+.ws-row.now{background:var(--gold-tint);border-radius:10px;border-bottom-color:transparent}
 .ws-band{position:relative;height:34px;border-radius:999px;background:linear-gradient(90deg,var(--gold-tint) 0%,#FBEFD2 30%,#F4DCBB 58%,#E7E3D0 80%,#DCEBF1 100%);box-shadow:inset 0 0 0 1px var(--hair)}
 :root[data-theme="dark"] .ws-band{background:linear-gradient(90deg,#202B3C 0%,#2A3242 42%,#35445A 74%,#2C4457 100%);box-shadow:inset 0 0 0 1px var(--hair)}
 :root[data-theme="dark"] .ws-band::after{content:"";position:absolute;left:16px;right:16px;top:50%;height:1.5px;margin-top:-0.75px;border-radius:2px;background:var(--gold);opacity:.45}
@@ -1345,7 +1358,7 @@ function renderToday(){
   var bandHtml='<div class="today-window'+(isNight?" night":"")+'">'
     +(isNight
       ? nightPanelHTML(barS,now,ph.id)
-      : '<div class="card" style="margin:0"><p class="card-label">'+(ph.id==="passed"||ph.id==="recorded"?"This morning\u2019s five windows":"Tonight\u2019s five windows")+'</p>'+windowSliderHTML(barS,{uid:"today"})+'</div>')
+      : '<div class="card" style="margin:0"><p class="card-label">'+(ph.id==="passed"||ph.id==="recorded"?"This morning\u2019s five windows":"Tonight\u2019s five windows")+'</p>'+windowSliderHTML(barS,{uid:"today"})+windowRowsHTML(barS,now)+'</div>')
     +'</div>';
   var previewNoticeHtml=state.previewNotice?'<p class="small" role="status" style="margin:10px 0 0;color:var(--gold-text)">'+esc(state.previewNotice)+'</p>':"";
   var previewNote=preview?'<p class="small" style="margin:10px 0 0">Preview — not tonight\u2019s real times. <button type="button" class="link-btn" id="endPreview" style="min-height:44px;padding:4px">End preview</button></p>':"";
@@ -1666,29 +1679,52 @@ function windowCurrentIdx(now,S){
 /* ONE shared window component: a dawn horizon band with the live sun
    position on it, then the four moments as one aligned grid — time
    first, label second, one small info phrase, all in the same block. */
+function fmtRange(a,b){
+  var pa=tzParts(a), pb=tzParts(b);
+  var apA=pa.h>=12?"pm":"am", apB=pb.h>=12?"pm":"am";
+  function hm(p){ var hh=p.h%12; if(hh===0) hh=12; return hh+":"+(p.mi<10?"0":"")+p.mi; }
+  return hm(pa)+(apA===apB?"":" "+apA)+" \u2013 "+hm(pb)+" "+apB;
+}
+/* Five windows as five rows \u2014 every window's own start and end times,
+   its length and its reward, in one scannable list. Shared by the strip,
+   the Today card and the Marks screen so the times agree everywhere. */
+function windowRowsHTML(S,now){
+  var live=!!now && now.getTime()>=windowOpen(S).getTime() && now.getTime()<S.getTime();
+  var cur=live?markAt(now,S):null;
+  var h='<div class="ws-rows">';
+  SEGMENTS.forEach(function(sg){
+    var st=new Date(S.getTime()-sg.startMin*60000), en=new Date(S.getTime()-sg.endMin*60000);
+    var v=0; TIERS.forEach(function(x){ if(x.name===sg.name) v=x.value*MULT; });
+    var passed=live && now.getTime()>=en.getTime();
+    var isNow=cur===sg.name;
+    h+='<div class="ws-row'+(isNow?" now":"")+(passed&&!isNow?" passed":"")+'" data-ws-row data-start="'+st.getTime()+'" data-end="'+en.getTime()+'">'
+      +'<span class="ws-glyph">'+markGlyph(sg.name,26)+'</span>'
+      +'<span class="ws-r-main"><span class="ws-r-name">'+sg.name+' window<span class="ws-now"'+(isNow?"":' style="display:none"')+'>Now</span></span>'
+      +'<span class="ws-r-times tnum">'+fmtRange(st,en)+' \u00B7 '+fmtDurHM(sg.startMin-sg.endMin)+'</span></span>'
+      +'<span class="ws-r-val tnum">'+fmtStatic(v)+'</span>'
+      +'</div>';
+  });
+  return h+'</div>';
+}
 function windowStripHTML(S,now,opts){
   opts=opts||{};
-  var open=windowOpen(S), goldUntil=anchorTime(S,TIERS[0]);
+  var open=windowOpen(S);
   var live=!!now && now.getTime()>=open.getTime() && now.getTime()<S.getTime();
-  var cur=windowCurrentIdx(now,S);
   var marker="";
   if(live){ var ml=windowMarkerLeft(now,S); if(ml!==null) marker='<span class="ws-marker" id="wsMarker" style="left:'+ml+'%"></span>'; }
-  function moment(idx,time,label,info){
-    return '<div class="ws-moment'+(idx===cur?" now":"")+'" data-ws-idx="'+idx+'">'
-      +'<span class="ws-time tnum">'+time+'</span>'
-      +'<span class="ws-label">'+label+'</span>'
-      +(info?'<span class="ws-info">'+info+'</span>':'<span class="ws-info" aria-hidden="true">&nbsp;</span>')
-      +'</div>';
-  }
+  var dark=false;
+  try{ dark=document.documentElement.getAttribute("data-theme")==="dark"; }catch(e){}
+  var segs="";
+  SEGMENTS.forEach(function(sg){
+    var w=(sg.startMin-sg.endMin)/360*100;
+    segs+='<span class="ws-seg" style="width:'+w+'%;background:'+(dark?MARKS[sg.name].color:MARKS[sg.name].tint)+'"></span>';
+  });
   var dayWord=(now&&S.getTime()<=now.getTime())?"This morning\u2019s":((opts&&opts.dayWord)||"Tonight\u2019s");
-  return '<div class="window-strip" role="img" aria-label="'+dayWord+' five windows: the Gold window opens '+fmtTime(open)+' at the full reward, the full reward ends '+fmtTime(goldUntil)+', then it falls through the Silver, Milk, Grain and Water windows, and the last window ends at sunrise '+fmtTime(S)+'">'
-    +'<div class="ws-band">'+marker+'</div>'
-    +'<div class="ws-grid'+(live?" live":"")+'">'
-    +moment(0,fmtTime(open),"Gold window opens","the full reward")
-    +moment(1,fmtTime(goldUntil),"Full reward ends","after this, it falls")
-    +moment(2,"&nbsp;","Then it falls","less with every step")
-    +moment(3,fmtTime(S),"Last window ends","at sunrise")
-    +'</div></div>';
+  var aria=dayWord+" five windows: "+SEGMENTS.map(function(sg){ return sg.name+" window "+fmtRange(new Date(S.getTime()-sg.startMin*60000), new Date(S.getTime()-sg.endMin*60000)); }).join(", ")+".";
+  return '<div class="window-strip" role="img" aria-label="'+aria+'">'
+    +'<div class="ws-band ws-band-seg">'+segs+marker+'</div>'
+    +windowRowsHTML(S,now)
+    +'</div>';
 }
 /* Back-compat alias — every surface renders the same strip. */
 function windowTimelineHTML(S,now){ return windowStripHTML(S,now); }
@@ -2175,12 +2211,12 @@ function tierRowsHTML(S,now){
   var cur=markAt(now,S);
   var h='<div class="tier-rows">';
   SEGMENTS.forEach(function(sg){
-    var st=segStart(S,sg.name);
+    var st=segStart(S,sg.name), en=new Date(S.getTime()-sg.endMin*60000);
     var v=TIERS.filter(function(t){ return t.name===sg.name; })[0].value*MULT;
     var passed=now.getTime()>new Date(S.getTime()-sg.endMin*60000).getTime();
     h+='<div class="tier-row'+(cur===sg.name?" now":"")+(passed&&cur!==sg.name?" passed":"")+'" data-tier="'+sg.name+'" style="border-left-color:'+MARKS[sg.name].color+'">'
       +'<span class="t-name"><span class="t-full">'+winLabel(sg.name)+'</span><span class="t-short">'+sg.name+'</span></span>'
-      +'<span class="t-time tnum" style="white-space:nowrap">'+fmtTime(st)+'</span>'
+      +'<span class="t-time tnum" style="white-space:nowrap">'+fmtRange(st,en)+'</span>'
       +'<span class="t-val tnum">'+fmtStatic(v)+'</span>'
       +(cur===sg.name?'<span class="t-now">now</span>':"")+'</div>';
   });
@@ -2266,6 +2302,12 @@ function updateLiveBits(now,S,phaseId){
   document.querySelectorAll(".ws-moment").forEach(function(mEl){
     var on=parseInt(mEl.getAttribute("data-ws-idx"),10)===curIdx;
     if(on!==mEl.classList.contains("now")) mEl.classList.toggle("now",on);
+  });
+  document.querySelectorAll(".ws-row[data-start]").forEach(function(rEl){
+    var st2=parseInt(rEl.getAttribute("data-start"),10), en2=parseInt(rEl.getAttribute("data-end"),10), tt=now.getTime();
+    var isN=tt>=st2&&tt<en2, isP=tt>=en2;
+    rEl.classList.toggle("now",isN); rEl.classList.toggle("passed",isP&&!isN);
+    var pl=rEl.querySelector(".ws-now"); if(pl) pl.style.display=isN?"":"none";
   });
   var df=document.getElementById("dawnFill");
   if(df){ var pct2=dawnLevelPct(valueAt(now,S)); df.style.transform="scaleX("+(pct2/100)+")"; var dn=document.getElementById("dawnNow"); if(dn) dn.style.left=pct2+"%"; }
@@ -2581,7 +2623,7 @@ function renderMarks(){
     html+='<div class="card" style="padding:26px">'
       +'<div style="display:flex;align-items:center;gap:16px">'+medallion(sg.name,52,false)
       +'<div><strong style="font-size:18px">'+winLabel(sg.name)+'</strong>'
-      +'<span class="small" style="display:block">Reward <span class="tnum">'+fmtStatic(atStart)+'</span> from <span class="tnum">'+fmtTime(start)+'</span></span></div></div>'
+      +'<span class="small" style="display:block">Window <span class="tnum">'+fmtRange(start,end)+'</span> \u00B7 Reward <span class="tnum">'+fmtStatic(atStart)+'</span></span></div></div>'
       +'<p class="mark-expl">'+m.expl+'</p>'
       +'<p class="mark-times">Shnaan done by <span class="tnum">'+fmtTime(finishByFor(S,sg.name))+'</span> · Wake <span class="tnum">'+fmtTime(bufferedWakeFor(S,sg.name))+'</span></p>'
       +'<button type="button" class="link-btn" data-setalarm="'+sg.name+'">'+(alarmOn?"Alarm set for "+fmtTime(bufferedWakeFor(S,sg.name)):"Set an alarm for this wake time")+'</button>'
